@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSW - A* Search Demo</title>
+    <link rel="stylesheet" href="/public/style.css">
+    <style>
+        canvas { border: 1px solid #ccc; cursor: pointer; }
+        .controls { margin-bottom: 15px; }
+        .stats { margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
+        <h1>A* Search: JS vs Wasm</h1>
+        
+        <div class="controls">
+            <button id="btnRunJS">Run JS</button>
+            <button id="btnRunWasm">Run Wasm</button>
+            <button id="btnClearPath">Clear Path</button>
+            <button id="btnReset">Reset Walls</button>
+            <span>Mode: <select id="mode"><option value="wall">Draw Walls</option><option value="start">Set Start</option><option value="end">Set End</option></select></span>
+        </div>
+
+        <canvas id="gridCanvas" width="600" height="600"></canvas>
+        
+        <div class="stats" id="stats"></div>
+    </div>
+
+    <script type="module">
+        import { findPathWasm } from '/src/astar.ts';
+
+        const canvas = document.getElementById('gridCanvas');
+        const ctx = canvas.getContext('2d');
+        const stats = document.getElementById('stats');
+        
+        const GRID_SIZE = 100; // 100x100 grid
+        const CELL_SIZE = 6;
+        const WIDTH = GRID_SIZE;
+        const HEIGHT = GRID_SIZE;
+        
+        let walls = new Array(WIDTH * HEIGHT).fill(0);
+        let start = { x: 2, y: 2 };
+        let end = { x: WIDTH - 3, y: HEIGHT - 3 };
+        let path = [];
+
+        // JS Implementation of A*
+        function findPathJS(width, height, walls, startX, startY, endX, endY) {
+            class Node {
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    this.g = 0;
+                    this.h = 0;
+                    this.f = 0;
+                    this.parentId = -1;
+                    this.closed = false;
+                    this.visited = false;
+                }
+            }
+
+            let nodes = new Array(width * height);
+            for(let y=0; y<height; y++) {
+                for(let x=0; x<width; x++) {
+                    nodes[y*width+x] = new Node(x, y);
+                }
+            }
+
+            let startIdx = startY * width + startX;
+            let openSet = [nodes[startIdx]];
+            nodes[startIdx].visited = true;
+
+            while(openSet.length > 0) {
+                openSet.sort((a, b) => a.f - b.f);
+                let current = openSet.shift();
+
+                if(current.x === endX && current.y === endY) {
+                    let p = [];
+                    let currIdx = current.y * width + current.x;
+                    while(currIdx !== -1) {
+                        let n = nodes[currIdx];
+                        p.push(n.y, n.x);
+                        currIdx = n.parentId;
+                    }
+                    return p;
+                }
+
+                current.closed = true;
+                
+                const neighbors = [
+                    {x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}
+                ];
+
+                for(let offset of neighbors) {
+                    let nx = current.x + offset.x;
+                    let ny = current.y + offset.y;
+
+                    if(nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                        let nIdx = ny * width + nx;
+                        if(walls[nIdx] === 1) continue;
+                        
+                        let neighbor = nodes[nIdx];
+                        if(neighbor.closed) continue;
+
+                        let gScore = current.g + 1;
+                        if(!neighbor.visited || gScore < neighbor.g) {
+                            neighbor.parentId = current.y * width + current.x;
+                            neighbor.g = gScore;
+                            neighbor.h = Math.abs(nx - endX) + Math.abs(ny - endY);
+                            neighbor.f = neighbor.g + neighbor.h;
+                            
+                            if(!neighbor.visited) {
+                                neighbor.visited = true;
+                                openSet.push(neighbor);
+                            }
+                        }
+                    }
+                }
+            }
+            return [];
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Grid
+            ctx.strokeStyle = '#eee';
+            for(let y=0; y<=HEIGHT; y++) {
+                ctx.beginPath(); ctx.moveTo(0, y*CELL_SIZE); ctx.lineTo(WIDTH*CELL_SIZE, y*CELL_SIZE); ctx.stroke();
+            }
+            for(let x=0; x<=WIDTH; x++) {
+                ctx.beginPath(); ctx.moveTo(x*CELL_SIZE, 0); ctx.lineTo(x*CELL_SIZE, HEIGHT*CELL_SIZE); ctx.stroke();
+            }
+
+            // Draw Walls
+            ctx.fillStyle = '#333';
+            for(let i=0; i<walls.length; i++) {
+                if(walls[i] === 1) {
+                    let x = i % WIDTH;
+                    let y = Math.floor(i / WIDTH);
+                    ctx.fillRect(x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                }
+            }
+
+            // Draw Path
+            if(path.length > 0) {
+                ctx.fillStyle = 'rgba(0, 123, 255, 0.5)';
+                for(let i=0; i<path.length; i+=2) {
+                    let y = path[i];
+                    let x = path[i+1];
+                    ctx.fillRect(x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                }
+            }
+
+            // Draw Start/End
+            ctx.fillStyle = 'green';
+            ctx.fillRect(start.x*CELL_SIZE, start.y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(end.x*CELL_SIZE, end.y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+
+        // Interaction
+        let isDrawing = false;
+        canvas.addEventListener('mousedown', e => {
+            isDrawing = true;
+            handleMouse(e);
+        });
+        canvas.addEventListener('mousemove', e => {
+            if(isDrawing) handleMouse(e);
+        });
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+
+        function handleMouse(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
+            const y = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+            
+            if(x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT) return;
+
+            const mode = document.getElementById('mode').value;
+            if(mode === 'wall') {
+                walls[y*WIDTH+x] = 1;
+            } else if(mode === 'start') {
+                start = {x, y};
+            } else if(mode === 'end') {
+                end = {x, y};
+            }
+            draw();
+        }
+
+        document.getElementById('btnReset').onclick = () => {
+            walls.fill(0);
+            path = [];
+            draw();
+        };
+        document.getElementById('btnClearPath').onclick = () => {
+            path = [];
+            draw();
+        };
+
+        document.getElementById('btnRunJS').onclick = () => {
+            const t0 = performance.now();
+            path = findPathJS(WIDTH, HEIGHT, walls, start.x, start.y, end.x, end.y);
+            const t1 = performance.now();
+            stats.textContent = `JS Time: ${(t1-t0).toFixed(2)}ms | Path Length: ${path.length/2}`;
+            draw();
+        };
+
+        document.getElementById('btnRunWasm').onclick = () => {
+            const t0 = performance.now();
+            // Note: walls array is passed. JSW handles marshalling.
+            // For very large arrays, this copy might be significant.
+            path = findPathWasm(WIDTH, HEIGHT, walls, start.x, start.y, end.x, end.y);
+            const t1 = performance.now();
+            stats.textContent = `Wasm Time: ${(t1-t0).toFixed(2)}ms | Path Length: ${path.length/2}`;
+            draw();
+        };
+
+        draw();
+    </script>
+</body>
+</html>

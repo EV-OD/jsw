@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSW - Extreme Benchmarks</title>
+    <link rel="stylesheet" href="/public/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container { position: relative; height: 500px; width: 100%; margin-top: 20px; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        button { padding: 12px 24px; cursor: pointer; font-weight: bold; font-size: 1.1em; }
+        button:hover { background-color: #e0e0e0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 1.1em; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .loading { color: #d32f2f; font-weight: bold; font-size: 1.2em; margin: 10px 0; }
+        .warning { color: #f57c00; font-size: 0.9em; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
+        <h1>Extreme Performance Benchmarks</h1>
+        <p class="warning">⚠️ Warning: These tests are computationally intensive and may freeze your browser tab for a few seconds.</p>
+        
+        <div class="controls">
+            <button id="btnPrimes">Run Primes (1M)</button>
+            <button id="btnFib">Run Fibonacci (40)</button>
+            <button id="btnSort">Run Bubble Sort (25k)</button>
+            <button id="btnMatrix">Run Matrix Mult (300x300)</button>
+            <button id="btnAll" style="background-color: #333; color: white;">Run All Extreme Tests</button>
+        </div>
+
+        <div id="status" class="loading"></div>
+
+        <div class="chart-container">
+            <canvas id="perfChart"></canvas>
+        </div>
+
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>Benchmark</th>
+                    <th>Input Size</th>
+                    <th>JS Time (ms)</th>
+                    <th>Wasm Time (ms)</th>
+                    <th>Speedup</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <script type="module">
+        import { countPrimesWasm, fibonacciWasm, bubbleSortWasm, matrixMultiplyWasm } from '/src/benchmark.ts';
+
+        // --- JS Implementations ---
+
+        function isPrimeJS(n) {
+            if (n <= 1) return false;
+            if (n <= 3) return true;
+            if (n % 2 === 0 || n % 3 === 0) return false;
+            let i = 5;
+            while (i * i <= n) {
+                if (n % i === 0 || n % (i + 2) === 0) return false;
+                i += 6;
+            }
+            return true;
+        }
+
+        function countPrimesJS(limit) {
+            let count = 0;
+            for (let i = 0; i < limit; i++) {
+                if (isPrimeJS(i)) count++;
+            }
+            return count;
+        }
+
+        function fibonacciJS(n) {
+            if (n <= 1) return n;
+            return fibonacciJS(n - 1) + fibonacciJS(n - 2);
+        }
+
+        function bubbleSortJS(arr) {
+            let len = arr.length;
+            for (let i = 0; i < len; i++) {
+                for (let j = 0; j < len - i - 1; j++) {
+                    if (arr[j] > arr[j + 1]) {
+                        let temp = arr[j];
+                        arr[j] = arr[j + 1];
+                        arr[j + 1] = temp;
+                    }
+                }
+            }
+            return arr;
+        }
+
+        function matrixMultiplyJS(a, b, size) {
+            let result = new Array(size * size);
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    let sum = 0;
+                    for (let k = 0; k < size; k++) {
+                        sum += a[i * size + k] * b[k * size + j];
+                    }
+                    result[i * size + j] = sum;
+                }
+            }
+            return result;
+        }
+
+        // --- Chart Setup ---
+        const ctx = document.getElementById('perfChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'JavaScript (ms)',
+                        data: [],
+                        backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'WebAssembly (ms)',
+                        data: [],
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Time (ms)' }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Lower is Better',
+                        font: { size: 16 }
+                    }
+                }
+            }
+        });
+
+        function updateChart(label, jsTime, wasmTime) {
+            const idx = chart.data.labels.indexOf(label);
+            if (idx >= 0) {
+                chart.data.datasets[0].data[idx] = jsTime;
+                chart.data.datasets[1].data[idx] = wasmTime;
+            } else {
+                chart.data.labels.push(label);
+                chart.data.datasets[0].data.push(jsTime);
+                chart.data.datasets[1].data.push(wasmTime);
+            }
+            chart.update();
+        }
+
+        function addRow(name, size, jsTime, wasmTime) {
+            const tbody = document.querySelector('#resultsTable tbody');
+            const row = document.createElement('tr');
+            const speedup = (jsTime / wasmTime).toFixed(2);
+            const color = wasmTime < jsTime ? '#2e7d32' : '#c62828'; // Dark green / Dark red
+            
+            row.innerHTML = `
+                <td>${name}</td>
+                <td>${size}</td>
+                <td>${jsTime.toFixed(2)}</td>
+                <td>${wasmTime.toFixed(2)}</td>
+                <td style="color: ${color}; font-weight: bold; font-size: 1.2em">${speedup}x</td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        async function runBenchmark(name, size, jsFn, wasmFn) {
+            const status = document.getElementById('status');
+            status.textContent = `Running ${name}... (Please wait)`;
+            
+            // Force UI update
+            await new Promise(r => requestAnimationFrame(() => setTimeout(r, 100)));
+
+            try {
+                // Run JS
+                const t0 = performance.now();
+                jsFn();
+                const t1 = performance.now();
+                const jsTime = t1 - t0;
+
+                // Yield between tests
+                await new Promise(r => setTimeout(r, 50));
+
+                // Run Wasm
+                const t2 = performance.now();
+                wasmFn();
+                const t3 = performance.now();
+                const wasmTime = t3 - t2;
+
+                updateChart(name, jsTime, wasmTime);
+                addRow(name, size, jsTime, wasmTime);
+            } catch (e) {
+                console.error(e);
+                alert(`Error running ${name}: ${e.message}`);
+            } finally {
+                status.textContent = '';
+            }
+        }
+
+        // --- Event Handlers ---
+
+        document.getElementById('btnPrimes').onclick = () => {
+            const LIMIT = 1000000; // 1 Million
+            runBenchmark('Primes', `Count < ${LIMIT.toLocaleString()}`, 
+                () => countPrimesJS(LIMIT), 
+                () => countPrimesWasm(LIMIT)
+            );
+        };
+
+        document.getElementById('btnFib').onclick = () => {
+            const N = 40; // Exponential growth, 40 is heavy
+            runBenchmark('Fibonacci', `fib(${N})`, 
+                () => fibonacciJS(N), 
+                () => fibonacciWasm(N)
+            );
+        };
+
+        document.getElementById('btnSort').onclick = () => {
+            const SIZE = 25000; // O(n^2) -> 625M ops
+            const arr1 = Array.from({length: SIZE}, () => Math.random() * 10000);
+            const arr2 = [...arr1]; 
+            
+            runBenchmark('Bubble Sort', `${SIZE.toLocaleString()} items`, 
+                () => bubbleSortJS(arr1), 
+                () => bubbleSortWasm(arr2)
+            );
+        };
+
+        document.getElementById('btnMatrix').onclick = () => {
+            const SIZE = 300; // O(n^3) -> 27M ops
+            const a = Array.from({length: SIZE * SIZE}, () => Math.random());
+            const b = Array.from({length: SIZE * SIZE}, () => Math.random());
+            
+            // Deep copy for Wasm not strictly needed as we don't mutate inputs, but good practice
+            const a2 = [...a];
+            const b2 = [...b];
+
+            runBenchmark('Matrix Mult', `${SIZE}x${SIZE}`, 
+                () => matrixMultiplyJS(a, b, SIZE), 
+                () => matrixMultiplyWasm(a2, b2, SIZE)
+            );
+        };
+
+        document.getElementById('btnAll').onclick = async () => {
+            document.querySelector('#resultsTable tbody').innerHTML = '';
+            chart.data.labels = [];
+            chart.data.datasets[0].data = [];
+            chart.data.datasets[1].data = [];
+            chart.update();
+
+            await document.getElementById('btnPrimes').onclick();
+            await document.getElementById('btnFib').onclick();
+            await document.getElementById('btnSort').onclick();
+            await document.getElementById('btnMatrix').onclick();
+        };
+    </script>
+</body>
+</html>

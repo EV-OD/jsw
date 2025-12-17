@@ -18,6 +18,8 @@ export default defineConfig({
                 callbacks: resolve(__dirname, 'tests/callbacks.html'),
                 classes: resolve(__dirname, 'tests/classes.html'),
                 matrix: resolve(__dirname, 'tests/matrix.html'),
+                astar: resolve(__dirname, 'tests/astar.html'),
+                benchmark: resolve(__dirname, 'tests/benchmark.html'),
             },
         },
     }
