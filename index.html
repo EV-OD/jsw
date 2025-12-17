@@ -1,10 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script type="module">
-import { add } from "./build/release.js";
-document.body.innerText = add(1, 2);
-</script>
+    <script type="module">
+      import { add, factorial, normalJS, greet, addInt } from '/src/index.ts';
+      console.log('Running tests from browser...');
+      console.log('add(10, 20) =', add(10, 20));
+      console.log('factorial(5) =', factorial(5));
+      console.log('normalJS(5) =', normalJS(5));
+      console.log('greet("World") =', greet("World"));
+      console.log('addInt(5, 7) =', addInt(5, 7));
+      
+      document.body.innerHTML += `
+        <p>add(10, 20) = ${add(10, 20)}</p>
+        <p>factorial(5) = ${factorial(5)}</p>
+        <p>normalJS(5) = ${normalJS(5)}</p>
+        <p>greet("World") = ${greet("World")}</p>
+        <p>addInt(5, 7) = ${addInt(5, 7)}</p>
+      `;
+    </script>
 </head>
 <body></body>
 </html>
