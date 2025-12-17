@@ -9,9 +9,25 @@ export function parseFile(code) {
     });
 
     const functions = [];
+    const structs = [];
 
     const visit = (node) => {
-        if (node.type === 'FunctionDeclaration' || (node.type === 'ExportNamedDeclaration' && node.declaration && node.declaration.type === 'FunctionDeclaration')) {
+        if (node.type === 'TSInterfaceDeclaration' || (node.type === 'ExportNamedDeclaration' && node.declaration && node.declaration.type === 'TSInterfaceDeclaration')) {
+            const iface = node.type === 'TSInterfaceDeclaration' ? node : node.declaration;
+            const name = iface.id.name;
+            const fields = [];
+            
+            iface.body.body.forEach(prop => {
+                if (prop.type === 'TSPropertySignature') {
+                    const fieldName = prop.key.name;
+                    const fieldType = mapTsType(prop.typeAnnotation.typeAnnotation);
+                    fields.push({ name: fieldName, type: fieldType });
+                }
+            });
+            
+            structs.push({ name, fields });
+        }
+        else if (node.type === 'FunctionDeclaration' || (node.type === 'ExportNamedDeclaration' && node.declaration && node.declaration.type === 'FunctionDeclaration')) {
             const func = node.type === 'FunctionDeclaration' ? node : node.declaration;
             
             if (func.body.body.length > 0 && isUseWasm(func.body.body[0])) {
@@ -31,33 +47,42 @@ export function parseFile(code) {
                     returnType = mapTsType(func.returnType.typeAnnotation);
                 }
 
-                // Extract body without "use wasm"
-                // We need to convert Babel AST to ESTree for astring or just use astring if compatible
-                // Babel AST is mostly compatible but has some differences. 
-                // For simple function bodies, it might work.
-                // However, 'astring' expects ESTree. Babel produces slightly different AST.
-                // We might need to strip type annotations before passing to astring.
+                                // Extract body source directly to preserve types
+                const bodyStart = func.body.start;
+                const bodyEnd = func.body.end;
+                let bodySource = code.slice(bodyStart, bodyEnd);
+
+                // Remove "use wasm"
+                const useWasmNode = func.body.body[0];
+                // Calculate relative positions
+                const relativeStart = useWasmNode.start - bodyStart;
+                const relativeEnd = useWasmNode.end - bodyStart;
                 
-                const bodyNodes = func.body.body.slice(1);
+                // Replace "use wasm" with spaces to preserve formatting/line numbers, or just remove
+                // We need to be careful not to break the block structure
+                const before = bodySource.slice(0, relativeStart);
+                const after = bodySource.slice(relativeEnd);
                 
-                // Quick hack: Remove type annotations from the body nodes to make them ESTree compatible
-                // In a real world, we should use a proper transformer or babel-generator
-                const cleanBody = removeTypes({ type: 'BlockStatement', body: bodyNodes });
-                
-                const bodyCode = generate(cleanBody);
+                // Check for trailing semicolon or newline in the gap?
+                // Usually "use wasm"; 
+                // We can just replace the content with comments or whitespace
+                bodySource = before + "/* use wasm removed */" + after;
+
+                // Replace console.log with consoleLog for AS compatibility
+                bodySource = bodySource.replace(/console\.log\s*\(/g, 'consoleLog(');
 
                 functions.push({
                     name,
                     params,
                     returnType,
-                    body: bodyCode
+                    body: bodySource
                 });
             }
         }
     };
 
     ast.program.body.forEach(visit);
-    return functions;
+    return { functions, structs };
 }
 
 function isUseWasm(node) {
@@ -72,10 +97,27 @@ function mapTsType(tsType) {
         case 'TSStringKeyword': return 'string';
         case 'TSBooleanKeyword': return 'bool';
         case 'TSVoidKeyword': return 'void';
-        // Add more mappings as needed
+        case 'TSArrayType': {
+            const elementType = mapTsType(tsType.elementType);
+            return `${elementType}[]`; 
+        }
+        case 'TSTypeReference': {
+            // Handle Array<T> syntax
+            if (tsType.typeName.name === 'Array' && tsType.typeParameters && tsType.typeParameters.params.length > 0) {
+                const elementType = mapTsType(tsType.typeParameters.params[0]);
+                return `${elementType}[]`;
+            }
+            // Handle TypedArrays
+            if (['Int32Array', 'Float64Array', 'Uint8Array'].includes(tsType.typeName.name)) {
+                return tsType.typeName.name;
+            }
+            // Handle custom types (structs)
+            return tsType.typeName.name;
+        }
         default: return 'f64';
     }
 }
+
 
 function removeTypes(node) {
     if (!node) return node;

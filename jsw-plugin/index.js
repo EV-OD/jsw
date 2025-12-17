@@ -5,24 +5,28 @@ import { glob } from 'glob';
 import { parseFile } from './parser.js';
 import { generateAS } from './generator.js';
 import { compileAS } from './compiler.js';
+import { generateGlueCode } from './marshaller.js';
 import { parse } from '@babel/parser';
 import { generate } from 'astring';
 
 export default function jswPlugin() {
     let functionsToCompile = [];
+    let structsToCompile = [];
 
     async function compile() {
         const files = await glob('src/**/*.ts', { absolute: true });
         functionsToCompile = [];
+        structsToCompile = [];
 
         for (const file of files) {
             const code = fs.readFileSync(file, 'utf-8');
-            const funcs = parseFile(code);
-            functionsToCompile.push(...funcs);
+            const { functions, structs } = parseFile(code);
+            functionsToCompile.push(...functions);
+            structsToCompile.push(...structs);
         }
 
-        if (functionsToCompile.length > 0) {
-            const asCode = generateAS(functionsToCompile);
+        if (functionsToCompile.length > 0 || structsToCompile.length > 0) {
+            const asCode = generateAS(functionsToCompile, structsToCompile);
             compileAS(asCode);
         }
     }
@@ -69,53 +73,7 @@ export default function jswPlugin() {
 
         load(id) {
             if (id === '\0virtual:jsw-wasm') {
-                let wrappers = '';
-                for (const func of functionsToCompile) {
-                    const args = func.params.map((p, i) => `arg${i}`).join(', ');
-                    
-                    let callArgs = [];
-                    let prepCode = '';
-                    
-                    func.params.forEach((p, i) => {
-                        if (p.type === 'string') {
-                            prepCode += `const ptr${i} = wasmExports.__newString(arg${i});\n`;
-                            callArgs.push(`ptr${i}`);
-                        } else {
-                            callArgs.push(`arg${i}`);
-                        }
-                    });
-                    
-                    let call = `wasmExports.${func.name}(${callArgs.join(', ')})`;
-                    
-                    if (func.returnType === 'string') {
-                        call = `wasmExports.__getString(${call})`;
-                    }
-                    
-                    wrappers += `
-                    export function ${func.name}(${args}) {
-                        ${prepCode}
-                        return ${call};
-                    }
-                    `;
-                }
-
-                return `
-                    import { instantiate } from '@assemblyscript/loader';
-                    
-                    const response = await fetch('/jsw.wasm');
-                    const module = await instantiate(response, {
-                        env: {
-                            consoleLog: (ptr) => {
-                                const str = module.exports.__getString(ptr);
-                                console.log(str);
-                            },
-                            abort: () => console.log("Abort!")
-                        }
-                    });
-                    const wasmExports = module.exports;
-                    
-                    ${wrappers}
-                `;
+                return generateGlueCode(functionsToCompile, structsToCompile);
             }
         },
 

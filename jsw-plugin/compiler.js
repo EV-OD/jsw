@@ -11,7 +11,7 @@ export function compileAS(asCode) {
     try {
         if (!fs.existsSync('public')) fs.mkdirSync('public');
         const ascPath = path.resolve('node_modules/.bin/asc');
-        execSync(`${ascPath} assembly/generated.ts --target release --outFile public/jsw.wasm`, { stdio: 'inherit' });
+        execSync(`${ascPath} assembly/generated.ts --target release --exportRuntime --outFile public/jsw.wasm`, { stdio: 'inherit' });
         return true;
     } catch (e) {
         console.error('[jsw] Compilation failed', e);
