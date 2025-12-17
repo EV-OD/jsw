@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSW - Class Tests</title>
+    <link rel="stylesheet" href="/public/style.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
+        <h1>Class Features Tests</h1>
+        <div id="app"></div>
+    </div>
+    <script type="module">
+        import { getStaticProp, testClassFeatures } from '/src/class_features_test.ts';
+        import { createRect, rectArea } from '/src/class_test.ts';
+
+        const app = document.getElementById('app');
+        function assert(condition, message) {
+            const div = document.createElement('div');
+            div.className = condition ? 'test-result pass' : 'test-result fail';
+            div.textContent = (condition ? '✅ PASS: ' : '❌ FAIL: ') + message;
+            app.appendChild(div);
+        }
+
+        // Test 1: Static Properties
+        try {
+            const staticVal = getStaticProp();
+            assert(staticVal === 24, `Static Property: Expected 24, got ${staticVal}`);
+        } catch (e) { assert(false, `Static Prop Error: ${e.message}`); }
+
+        // Test 2: Inheritance & Super Calls
+        try {
+            // testClassFeatures(10) -> new ExtendedClass(10)
+            // super(1) sets instanceProp = 1
+            // this.extendedProp = 10
+            // add(24, 0) calls super.add(24, 10 + 1) = 24 + 11 = 35
+            const result = testClassFeatures(10);
+            assert(result === 35, `Inheritance Logic: Expected 35, got ${result}`);
+        } catch (e) { assert(false, `Inheritance Error: ${e.message}`); }
+
+        // Test 3: Basic Class DTO (Rect)
+        try {
+            const r = createRect(0, 0, 10, 20);
+            const area = rectArea(r);
+            assert(area === 200, `Class DTO: Expected Area 200, got ${area}`);
+        } catch (e) { assert(false, `Class DTO Error: ${e.message}`); }
+    </script>
+</body>
+</html>

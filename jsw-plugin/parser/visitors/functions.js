@@ -1,7 +1,7 @@
 import * as t from '@babel/types';
 import generate from '@babel/generator';
 import { mapTsType } from '../types.js';
-import { isUseWasm, isUseWasmStmt } from '../utils.js';
+import { isUseWasm, isUseWasmStmt, transformBodyTypes } from '../utils.js';
 import { processLambdas } from './lambdas.js';
 
 export function createFunctionsVisitor(state) {
@@ -10,6 +10,10 @@ export function createFunctionsVisitor(state) {
             if (!isUseWasm(path.node)) return;
 
             const funcName = path.node.id.name;
+            
+            // Transform body types first so analysis sees AS types
+            transformBodyTypes(path.get('body'));
+
             const params = path.node.params.map(p => {
                 let type = 'f64';
                 let isCallback = false;

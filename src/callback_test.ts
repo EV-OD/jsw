@@ -12,9 +12,8 @@ export function getFunc(): (v: number) => number {
 
 export function getAdder(amount: number): (v: number) => number {
     "use wasm";
-    let x:number = 1;
     return (v: number): number => {
-        return v * 2 + x + amount;
+        return v + amount;
     };
 }
 

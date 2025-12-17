@@ -1,4 +1,7 @@
+import * as t from '@babel/types';
+import generate from '@babel/generator';
 import { mapTsType } from '../types.js';
+import { transformBodyTypes } from '../utils.js';
 
 export function createStructsVisitor(structs) {
     return {
@@ -12,29 +15,80 @@ export function createStructsVisitor(structs) {
         },
         ClassDeclaration(path) {
             const name = path.node.id.name;
+            const superClass = path.node.superClass ? path.node.superClass.name : null;
             const fields = [];
+            const staticFields = [];
+            const methods = [];
+            const staticMethods = [];
             let constructorParams = [];
+            let constructorBody = null;
             
-            path.node.body.body.forEach(node => {
+            path.get('body.body').forEach(propPath => {
+                const node = propPath.node;
+                
                 if (node.type === 'ClassProperty') {
                      let type = 'f64';
                      if (node.typeAnnotation) {
                          type = mapTsType(node.typeAnnotation.typeAnnotation);
                      }
-                     fields.push({
+                     
+                     const field = {
                         name: node.key.name,
-                        type: type
-                     });
-                } else if (node.type === 'ClassMethod' && node.kind === 'constructor') {
-                    constructorParams = node.params.map(p => ({
-                        name: p.name,
-                        type: mapTsType(p.typeAnnotation.typeAnnotation)
-                    }));
+                        type: type,
+                        value: node.value ? generate.default(node.value).code : null
+                     };
+
+                     if (node.static) {
+                         staticFields.push(field);
+                     } else {
+                         fields.push(field);
+                     }
+                } else if (node.type === 'ClassMethod') {
+                    if (node.kind === 'constructor') {
+                        constructorParams = node.params.map(p => ({
+                            name: p.name,
+                            type: mapTsType(p.typeAnnotation.typeAnnotation)
+                        }));
+                        
+                        transformBodyTypes(propPath.get('body'));
+                        constructorBody = generate.default(node.body).code;
+                        
+                    } else if (node.kind === 'method') {
+                        const params = node.params.map(p => ({
+                            name: p.name,
+                            type: mapTsType(p.typeAnnotation.typeAnnotation)
+                        }));
+                        const returnType = mapTsType(node.returnType.typeAnnotation);
+                        
+                        transformBodyTypes(propPath.get('body'));
+                        const body = generate.default(node.body).code;
+                        
+                        const method = {
+                            name: node.key.name,
+                            params,
+                            returnType,
+                            body
+                        };
+                        
+                        if (node.static) {
+                            staticMethods.push(method);
+                        } else {
+                            methods.push(method);
+                        }
+                    }
                 }
             });
-            if (fields.length > 0) {
-                structs.push({ name, fields, constructorParams });
-            }
+            
+            structs.push({ 
+                name, 
+                superClass,
+                fields, 
+                staticFields,
+                methods,
+                staticMethods,
+                constructorParams,
+                constructorBody
+            });
         }
     };
 }

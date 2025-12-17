@@ -17,7 +17,7 @@ export function createComplex(id: number): ComplexObj {
         id: id,
         list: [1, 2, 3],
         nested: {
-            val: 100,
+            val: id * 2,
             fn: (x: number): number => x + 1
         },
         processor: (n: number): number => n * id

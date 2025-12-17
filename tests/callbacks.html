@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSW - Callback Tests</title>
+    <link rel="stylesheet" href="/public/style.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
+        <h1>Callbacks, Closures & Globals</h1>
+        <div id="app"></div>
+    </div>
+    <script type="module">
+        import { testCallback, getFunc, getAdder, addGlobal } from '/src/callback_test.ts';
+
+        const app = document.getElementById('app');
+        function assert(condition, message) {
+            const div = document.createElement('div');
+            div.className = condition ? 'test-result pass' : 'test-result fail';
+            div.textContent = (condition ? '✅ PASS: ' : '❌ FAIL: ') + message;
+            app.appendChild(div);
+        }
+
+        try {
+            const res = testCallback((x) => x * 2);
+            assert(res === 42, `testCallback(x=>x*2) = ${res}`);
+        } catch (e) { assert(false, `testCallback error: ${e.message}`); }
+
+        try {
+            const fn = getFunc();
+            const res = fn(5);
+            assert(res === 10, `getFunc()(5) = ${res}`);
+        } catch (e) { assert(false, `getFunc error: ${e.message}`); }
+
+        try {
+            const add5 = getAdder(5);
+            const res = add5(10);
+            assert(res === 15, `getAdder(5)(10) = ${res}`);
+        } catch (e) { assert(false, `getAdder error: ${e.message}`); }
+
+        try {
+            const res = addGlobal(10);
+            assert(res === 20, `addGlobal(10) [globalX=10] = ${res}`);
+        } catch (e) { assert(false, `addGlobal error: ${e.message}`); }
+    </script>
+</body>
+</html>

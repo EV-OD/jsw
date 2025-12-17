@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSW - Basic Tests</title>
+    <link rel="stylesheet" href="/public/style.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
+        <h1>Basic Types & Arrays</h1>
+        <div id="app"></div>
+    </div>
+    <script type="module">
+        import { add, factorial, greet, sumArray, doubleArray } from '/src/index.ts';
+
+        const app = document.getElementById('app');
+        function assert(condition, message) {
+            const div = document.createElement('div');
+            div.className = condition ? 'test-result pass' : 'test-result fail';
+            div.textContent = (condition ? '✅ PASS: ' : '❌ FAIL: ') + message;
+            app.appendChild(div);
+        }
+
+        try {
+            const res = add(10, 20);
+            assert(res === 30, `add(10, 20) = ${res}`);
+        } catch (e) { assert(false, `add error: ${e.message}`); }
+
+        try {
+            const res = factorial(5);
+            assert(res === 120, `factorial(5) = ${res}`);
+        } catch (e) { assert(false, `factorial error: ${e.message}`); }
+
+        try {
+            const res = greet("World");
+            assert(res === "Hello, World", `greet("World") = "${res}"`);
+        } catch (e) { assert(false, `greet error: ${e.message}`); }
+
+        try {
+            const res = sumArray([1, 2, 3, 4, 5]);
+            assert(res === 15, `sumArray([1..5]) = ${res}`);
+        } catch (e) { assert(false, `sumArray error: ${e.message}`); }
+
+        try {
+            const res = doubleArray([1, 2, 3]);
+            assert(JSON.stringify(res) === JSON.stringify([2, 4, 6]), `doubleArray([1,2,3]) = ${JSON.stringify(res)}`);
+        } catch (e) { assert(false, `doubleArray error: ${e.message}`); }
+    </script>
+</body>
+</html>

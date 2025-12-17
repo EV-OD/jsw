@@ -360,6 +360,42 @@ async function instantiate(module, imports = {}) {
       obj = __lowerInternref(obj) || __notnull();
       return exports.__get_Rect_height(obj);
     },
+    __new_BaseClass() {
+      // assembly/generated/__new_BaseClass() => assembly/generated/BaseClass
+      return __liftInternref(exports.__new_BaseClass() >>> 0);
+    },
+    __idof_BaseClass() {
+      // assembly/generated/__idof_BaseClass() => u32
+      return exports.__idof_BaseClass() >>> 0;
+    },
+    __set_BaseClass_instanceProp(obj, val) {
+      // assembly/generated/__set_BaseClass_instanceProp(assembly/generated/BaseClass, f64) => void
+      obj = __lowerInternref(obj) || __notnull();
+      exports.__set_BaseClass_instanceProp(obj, val);
+    },
+    __get_BaseClass_instanceProp(obj) {
+      // assembly/generated/__get_BaseClass_instanceProp(assembly/generated/BaseClass) => f64
+      obj = __lowerInternref(obj) || __notnull();
+      return exports.__get_BaseClass_instanceProp(obj);
+    },
+    __new_ExtendedClass() {
+      // assembly/generated/__new_ExtendedClass() => assembly/generated/ExtendedClass
+      return __liftInternref(exports.__new_ExtendedClass() >>> 0);
+    },
+    __idof_ExtendedClass() {
+      // assembly/generated/__idof_ExtendedClass() => u32
+      return exports.__idof_ExtendedClass() >>> 0;
+    },
+    __set_ExtendedClass_extendedProp(obj, val) {
+      // assembly/generated/__set_ExtendedClass_extendedProp(assembly/generated/ExtendedClass, f64) => void
+      obj = __lowerInternref(obj) || __notnull();
+      exports.__set_ExtendedClass_extendedProp(obj, val);
+    },
+    __get_ExtendedClass_extendedProp(obj) {
+      // assembly/generated/__get_ExtendedClass_extendedProp(assembly/generated/ExtendedClass) => f64
+      obj = __lowerInternref(obj) || __notnull();
+      return exports.__get_ExtendedClass_extendedProp(obj);
+    },
   }, exports);
   function __liftRecord5(pointer) {
     // assembly/generated/NestedObj
@@ -683,6 +719,14 @@ export const {
   __get_Rect_width,
   __set_Rect_height,
   __get_Rect_height,
+  __new_BaseClass,
+  __idof_BaseClass,
+  __set_BaseClass_instanceProp,
+  __get_BaseClass_instanceProp,
+  __new_ExtendedClass,
+  __idof_ExtendedClass,
+  __set_ExtendedClass_extendedProp,
+  __get_ExtendedClass_extendedProp,
 } = await (async url => instantiate(
   await (async () => {
     const isNodeOrBun = typeof process != "undefined" && process.versions != null && (process.versions.node != null || process.versions.bun != null);

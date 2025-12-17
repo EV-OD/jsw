@@ -1,7 +1,7 @@
 
 export function add(a: number, b: number): number {
   "use wasm";
-  return a * b;
+  return a + b;
 }
 
 export function factorial(n: number): number {

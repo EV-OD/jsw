@@ -372,6 +372,50 @@ export declare function __set_Rect_height(obj: __Internref13, val: number): void
  * @returns `f64`
  */
 export declare function __get_Rect_height(obj: __Internref13): number;
+/**
+ * assembly/generated/__new_BaseClass
+ * @returns `assembly/generated/BaseClass`
+ */
+export declare function __new_BaseClass(): __Internref14;
+/**
+ * assembly/generated/__idof_BaseClass
+ * @returns `u32`
+ */
+export declare function __idof_BaseClass(): number;
+/**
+ * assembly/generated/__set_BaseClass_instanceProp
+ * @param obj `assembly/generated/BaseClass`
+ * @param val `f64`
+ */
+export declare function __set_BaseClass_instanceProp(obj: __Internref14, val: number): void;
+/**
+ * assembly/generated/__get_BaseClass_instanceProp
+ * @param obj `assembly/generated/BaseClass`
+ * @returns `f64`
+ */
+export declare function __get_BaseClass_instanceProp(obj: __Internref14): number;
+/**
+ * assembly/generated/__new_ExtendedClass
+ * @returns `assembly/generated/ExtendedClass`
+ */
+export declare function __new_ExtendedClass(): __Internref15;
+/**
+ * assembly/generated/__idof_ExtendedClass
+ * @returns `u32`
+ */
+export declare function __idof_ExtendedClass(): number;
+/**
+ * assembly/generated/__set_ExtendedClass_extendedProp
+ * @param obj `assembly/generated/ExtendedClass`
+ * @param val `f64`
+ */
+export declare function __set_ExtendedClass_extendedProp(obj: __Internref15, val: number): void;
+/**
+ * assembly/generated/__get_ExtendedClass_extendedProp
+ * @param obj `assembly/generated/ExtendedClass`
+ * @returns `f64`
+ */
+export declare function __get_ExtendedClass_extendedProp(obj: __Internref15): number;
 /** assembly/generated/Closure */
 declare class __Internref4 extends Number {
   private __nominal4: symbol;
@@ -435,5 +479,16 @@ declare interface __Record12<TOmittable> {
 /** assembly/generated/Rect */
 declare class __Internref13 extends Number {
   private __nominal13: symbol;
+  private __nominal0: symbol;
+}
+/** assembly/generated/BaseClass */
+declare class __Internref14 extends Number {
+  private __nominal14: symbol;
+  private __nominal0: symbol;
+}
+/** assembly/generated/ExtendedClass */
+declare class __Internref15 extends Number {
+  private __nominal15: symbol;
+  private __nominal14: symbol;
   private __nominal0: symbol;
 }
