@@ -4,6 +4,7 @@
     <script type="module">
       import { add, factorial, normalJS, greet, addInt, sumArray, doubleArray, addPoints, processOuter, sumMatrix, transformPoints } from '/src/index.ts';
       import { multiplyMatrix } from '/src/matrix.ts';
+      import { testCallback, getFunc } from '/src/callback_test.ts';
       
       console.log('Running tests from browser...');
 
@@ -85,6 +86,14 @@
       const points = [{x: 1, y: 1}, {x: 2, y: 2}];
       const transformedPoints = transformPoints(points);
       assert(transformedPoints, [{x: 2, y: 2}, {x: 4, y: 4}], 'transformPoints(...)');
+
+      // Callbacks
+      const cbRes = testCallback((v) => v * 2);
+      assert(cbRes, 42, 'testCallback((v) => v * 2) with input 21');
+
+      // Returning Functions
+      const fn = getFunc();
+      assert(fn(10), 20, 'getFunc()(10)');
 
     </script>
 </head>

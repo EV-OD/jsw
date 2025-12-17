@@ -343,6 +343,7 @@ async function instantiate(module, imports = {}) {
 }
 export const {
   memory,
+  table,
   __new,
   __pin,
   __unpin,

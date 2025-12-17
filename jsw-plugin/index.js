@@ -2,10 +2,11 @@
 import fs from 'fs';
 import path from 'path';
 import { glob } from 'glob';
-import { parseFile } from './parser.js';
-import { generateAS } from './generator.js';
-import { compileAS } from './compiler.js';
-import { generateGlueCode } from './marshaller.js';
+import { parseFile } from './parser/index.js';
+import { generateAS } from './codegen/assembly.js';
+import { compileAS } from './compiler/index.js';
+import { generateGlueCode } from './codegen/glue.js';
+import { removeTypes } from './utils/ast.js';
 import { parse } from '@babel/parser';
 import { generate } from 'astring';
 
@@ -131,37 +132,4 @@ export default function jswPlugin() {
             }
         }
     };
-}
-
-// Duplicate helper from parser.js because of module scope
-function removeTypes(node) {
-    if (!node) return node;
-    if (Array.isArray(node)) return node.map(removeTypes);
-    if (typeof node === 'object') {
-        const newNode = { ...node };
-        delete newNode.typeAnnotation;
-        delete newNode.returnType;
-        delete newNode.optional;
-        
-        if (newNode.type === 'StringLiteral') {
-            newNode.type = 'Literal';
-            newNode.raw = `'${newNode.value}'`;
-        }
-        if (newNode.type === 'NumericLiteral') {
-            newNode.type = 'Literal';
-            newNode.raw = String(newNode.value);
-        }
-        if (newNode.type === 'BooleanLiteral') {
-            newNode.type = 'Literal';
-            newNode.raw = String(newNode.value);
-        }
-
-        for (const key in newNode) {
-            if (key !== 'loc' && key !== 'start' && key !== 'end') {
-                newNode[key] = removeTypes(newNode[key]);
-            }
-        }
-        return newNode;
-    }
-    return node;
 }

@@ -12,34 +12,45 @@ This document outlines the current features and limitations of the JSW (JavaScri
 ### 2. Type Support (TypeScript)
 The system uses TypeScript type annotations to infer AssemblyScript types:
 - **Numbers**: `number` is mapped to `f64` (double-precision float).
-- **Integers**: `number` is mapped to `f64` by default. (Explicit `i32` support requires specific casting or type aliases, currently defaults to `f64`).
+- **Integers**: You can use `type i32 = number;` to use 32-bit integers in AssemblyScript.
 - **Strings**: `string` is fully supported. The system automatically handles:
     - Allocating memory in Wasm for input strings.
     - Reading returned strings from Wasm memory.
 - **Booleans**: `boolean` is mapped to `bool`.
 - **Void**: `void` return types are supported.
 
-### 3. Standard Output
-- **console.log**: You can use `console.log()` inside your compiled functions. It is proxied to the browser's `console.log`.
+### 3. Complex Data Structures
+- **Objects (Interfaces)**: TypeScript Interfaces are compiled to AssemblyScript Classes.
+    - Automatic marshalling of objects between JS and Wasm.
+    - Support for nested objects.
+- **Arrays**: Full support for Arrays (`[]`).
+    - Arrays of primitives (`number[]`, `string[]`).
+    - Arrays of objects (`Point[]`).
+    - Nested arrays (`number[][]`).
 
-### 4. Control Flow & Logic
+### 4. Standard Output
+- **console.log**: You can use `console.log()` inside your compiled functions. It is automatically transformed to call the Wasm import.
+
+### 5. Control Flow & Logic
 - **Recursion**: Recursive function calls are supported (e.g., `factorial`).
 - **Arithmetic**: Standard mathematical operations (`+`, `-`, `*`, `/`, etc.) work as expected.
 - **Conditionals/Loops**: `if`, `else`, `for`, `while` loops are supported (as long as they compile to valid AssemblyScript).
 
-### 5. Developer Experience
+### 6. Developer Experience
 - **Hot Module Replacement (HMR)**: Changing a source file triggers a fast re-compile of the Wasm binary and reloads the page.
-- **No Manual Glue Code**: All memory management for strings and function calls is generated automatically.
+- **No Manual Glue Code**: All memory management for strings, arrays, objects, and function calls is generated automatically.
+
+### 7. Higher-Order Functions
+- **Callbacks**: You can pass JavaScript functions as arguments to compiled functions.
+    - The system automatically registers the callback and handles the invocation from Wasm.
+- **Returning Functions**: You can return functions from compiled functions.
+    - The returned function is wrapped so it can be called from JavaScript.
 
 ---
 
 ## Limitations (What it cannot do yet)
 
-### 1. Higher-Order Functions
-- **Passing Functions**: You cannot pass a JavaScript function as an argument to a compiled function (Callbacks).
-- **Returning Functions**: You cannot return a function from a compiled function (Closures).
-
-### 2. Closures & Scope
+### 1. Closures & Scope
 - **Environment Capture**: Compiled functions cannot "capture" variables from their surrounding JavaScript scope. They must be pure or only rely on their arguments and global Wasm state.
     ```typescript
     let x = 10;
@@ -49,9 +60,8 @@ The system uses TypeScript type annotations to infer AssemblyScript types:
     }
     ```
 
-### 3. Complex Data Structures
-- **Objects & Arrays**: Passing JavaScript Objects (`{}`) or Arrays (`[]`) is not supported. Only primitive types (`number`, `string`, `boolean`) are marshalled.
-- **Classes**: JS Classes are not mapped to AS Classes.
+### 2. Classes
+- **JS Classes**: JavaScript/TypeScript `class` definitions are not yet supported. Use `interface` for data structures.
 
 ### 4. JavaScript Standard Library
 - **Built-ins**: You cannot use JS built-ins like `Math` (unless using AS native `Math`), `Date`, `RegExp`, `JSON`, `Promise`, etc., unless you manually implement bindings.

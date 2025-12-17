@@ -1,5 +1,7 @@
 /** Exported memory */
 export declare const memory: WebAssembly.Memory;
+/** Exported table */
+export declare const table: WebAssembly.Table;
 // Exported runtime interface
 export declare function __new(size: number, id: number): number;
 export declare function __pin(ptr: number): number;

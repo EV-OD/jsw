@@ -85,6 +85,35 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
         `;
     }
 
+    // Generate callback invokers for env
+    let envCallbacks = '';
+    for (const func of functionsToCompile) {
+        for (const p of func.params) {
+            if (p.isCallback) {
+                const sig = p.callbackSignature;
+                const args = sig.params.map((_, i) => `arg${i}`).join(', ');
+                
+                const marshalledArgs = sig.params.map((t, i) => {
+                    let code = generateToJS(`arg${i}`, t);
+                    return code.replace(/wasmExports/g, 'module.exports');
+                }).join(', ');
+                
+                const returnConversion = (expr) => {
+                    let code = generateToWasm(expr, sig.returnType);
+                    return code.replace(/wasmExports/g, 'module.exports');
+                };
+                
+                envCallbacks += `
+                __invoke_${p.name}: (fnIndex, ${args}) => {
+                    const fn = getCallback(fnIndex);
+                    const result = fn(${marshalledArgs});
+                    return ${returnConversion('result')};
+                },
+                `;
+            }
+        }
+    }
+
     let wrappers = '';
     for (const func of functionsToCompile) {
         const args = func.params.map((p, i) => `arg${i}`).join(', ');
@@ -94,7 +123,10 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
         
         func.params.forEach((p, i) => {
             const valExpr = `arg${i}`;
-            if (p.type === 'f64' || p.type === 'i32' || p.type === 'bool') {
+            if (p.isCallback) {
+                prepCode += `const ptr${i} = registerCallback(${valExpr});\n`;
+                callArgs.push(`ptr${i}`);
+            } else if (p.type === 'f64' || p.type === 'i32' || p.type === 'bool') {
                 callArgs.push(valExpr);
             } else {
                 prepCode += `const ptr${i} = ${generateToWasm(valExpr, p.type)};\n`;
@@ -103,7 +135,33 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
         });
         
         let call = `wasmExports.${func.name}(${callArgs.join(', ')})`;
-        call = generateToJS(call, func.returnType);
+        
+        if (func.returnSignature) {
+             const sig = func.returnSignature;
+             const retArgs = sig.params.map((_, i) => `a${i}`).join(', ');
+             
+             // Marshal args JS -> Wasm
+             const marshalledRetArgs = sig.params.map((t, i) => {
+                 let code = generateToWasm(`a${i}`, t);
+                 return code.replace(/wasmExports/g, 'module.exports');
+             }).join(', ');
+             
+             // Marshal return Wasm -> JS
+             const retConv = (expr) => {
+                 let code = generateToJS(expr, sig.returnType);
+                 return code.replace(/wasmExports/g, 'module.exports');
+             };
+             
+             call = `((idx) => {
+                 return (${retArgs}) => {
+                     const fn = wasmExports.table.get(idx);
+                     const res = fn(${marshalledRetArgs});
+                     return ${retConv('res')};
+                 }
+             })(${call})`;
+        } else {
+             call = generateToJS(call, func.returnType);
+        }
         
         wrappers += `
         export function ${func.name}(${args}) {
@@ -115,6 +173,16 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
 
     return `
         import { instantiate } from '@assemblyscript/loader';
+
+        const callbackRegistry = [];
+        function registerCallback(fn) {
+            const idx = callbackRegistry.length;
+            callbackRegistry.push(fn);
+            return idx;
+        }
+        function getCallback(idx) {
+            return callbackRegistry[idx];
+        }
         
         const response = await fetch('/jsw.wasm');
         const module = await instantiate(response, {
@@ -123,7 +191,8 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
                     const str = module.exports.__getString(ptr);
                     console.log(str);
                 },
-                abort: () => console.log("Abort!")
+                abort: () => console.log("Abort!"),
+                ${envCallbacks}
             }
         });
         const wasmExports = module.exports;

@@ -36,15 +36,38 @@ export function parseFile(code) {
                 // Extract types from TS annotations
                 const params = func.params.map(p => {
                     let type = 'f64';
+                    let isCallback = false;
+                    let callbackSignature = null;
+
                     if (p.typeAnnotation && p.typeAnnotation.typeAnnotation) {
-                        type = mapTsType(p.typeAnnotation.typeAnnotation);
+                        const tsType = p.typeAnnotation.typeAnnotation;
+                        if (tsType.type === 'TSFunctionType') {
+                            isCallback = true;
+                            type = 'u32'; // AS type
+                            callbackSignature = {
+                                params: tsType.parameters.map(param => mapTsType(param.typeAnnotation.typeAnnotation)),
+                                returnType: mapTsType(tsType.typeAnnotation.typeAnnotation)
+                            };
+                        } else {
+                            type = mapTsType(tsType);
+                        }
                     }
-                    return { name: p.name, type };
+                    return { name: p.name, type, isCallback, callbackSignature };
                 });
 
                 let returnType = 'f64';
+                let returnSignature = null;
                 if (func.returnType && func.returnType.typeAnnotation) {
-                    returnType = mapTsType(func.returnType.typeAnnotation);
+                    const tsType = func.returnType.typeAnnotation;
+                    if (tsType.type === 'TSFunctionType') {
+                        returnType = 'u32'; // AS type
+                        returnSignature = {
+                            params: tsType.parameters.map(param => mapTsType(param.typeAnnotation.typeAnnotation)),
+                            returnType: mapTsType(tsType.typeAnnotation.typeAnnotation)
+                        };
+                    } else {
+                        returnType = mapTsType(tsType.typeAnnotation);
+                    }
                 }
 
                                 // Extract body source directly to preserve types
@@ -71,10 +94,21 @@ export function parseFile(code) {
                 // Replace console.log with consoleLog for AS compatibility
                 bodySource = bodySource.replace(/console\.log\s*\(/g, 'consoleLog(');
 
+                // Transform callback calls
+                params.forEach(p => {
+                    if (p.isCallback) {
+                        // Replace `cb(` with `__invoke_cb(cb, `
+                        // Use regex with word boundary to avoid replacing partial matches
+                        const regex = new RegExp(`\\b${p.name}\\s*\\(`, 'g');
+                        bodySource = bodySource.replace(regex, `__invoke_${p.name}(${p.name}, `);
+                    }
+                });
+
                 functions.push({
                     name,
                     params,
                     returnType,
+                    returnSignature,
                     body: bodySource
                 });
             }
@@ -118,36 +152,3 @@ function mapTsType(tsType) {
     }
 }
 
-
-function removeTypes(node) {
-    if (!node) return node;
-    if (Array.isArray(node)) return node.map(removeTypes);
-    if (typeof node === 'object') {
-        const newNode = { ...node };
-        delete newNode.typeAnnotation;
-        delete newNode.returnType;
-        delete newNode.optional;
-        
-        // Babel uses StringLiteral for directives, ESTree uses Literal
-        if (newNode.type === 'StringLiteral') {
-            newNode.type = 'Literal';
-            newNode.raw = `'${newNode.value}'`;
-        }
-        if (newNode.type === 'NumericLiteral') {
-            newNode.type = 'Literal';
-            newNode.raw = String(newNode.value);
-        }
-        if (newNode.type === 'BooleanLiteral') {
-            newNode.type = 'Literal';
-            newNode.raw = String(newNode.value);
-        }
-
-        for (const key in newNode) {
-            if (key !== 'loc' && key !== 'start' && key !== 'end') {
-                newNode[key] = removeTypes(newNode[key]);
-            }
-        }
-        return newNode;
-    }
-    return node;
-}

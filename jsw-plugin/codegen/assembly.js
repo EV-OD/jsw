@@ -50,6 +50,17 @@ declare function consoleLog(s: string): void;
     }
 
     for (const func of functions) {
+        // Generate external declarations for callbacks
+        for (const p of func.params) {
+            if (p.isCallback) {
+                const sig = p.callbackSignature;
+                const args = ['fnIndex: u32', ...sig.params.map((t, i) => `arg${i}: ${mapType(t)}`)].join(', ');
+                const ret = mapType(sig.returnType);
+                code += `@external("env", "__invoke_${p.name}")\n`;
+                code += `declare function __invoke_${p.name}(${args}): ${ret};\n\n`;
+            }
+        }
+
         const params = func.params.map(p => `${p.name}: ${mapType(p.type)}`).join(', ');
         const returnType = mapType(func.returnType);
         
