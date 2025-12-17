@@ -13,21 +13,30 @@ import { generate } from 'astring';
 export default function jswPlugin() {
     let functionsToCompile = [];
     let structsToCompile = [];
+    let globalsToCompile = [];
+    let lambdasToCompile = [];
+    let jsCallbacksToRegister = [];
 
     async function compile() {
         const files = await glob('src/**/*.ts', { absolute: true });
         functionsToCompile = [];
         structsToCompile = [];
+        globalsToCompile = [];
+        lambdasToCompile = [];
+        jsCallbacksToRegister = [];
 
         for (const file of files) {
             const code = fs.readFileSync(file, 'utf-8');
-            const { functions, structs } = parseFile(code);
+            const { functions, structs, globals, lambdas, jsCallbacks } = parseFile(code);
             functionsToCompile.push(...functions);
             structsToCompile.push(...structs);
+            if (globals) globalsToCompile.push(...globals);
+            if (lambdas) lambdasToCompile.push(...lambdas);
+            if (jsCallbacks) jsCallbacksToRegister.push(...jsCallbacks);
         }
 
         if (functionsToCompile.length > 0 || structsToCompile.length > 0) {
-            const asCode = generateAS(functionsToCompile, structsToCompile);
+            const asCode = generateAS(functionsToCompile, structsToCompile, globalsToCompile, lambdasToCompile);
             compileAS(asCode);
         }
     }
@@ -74,7 +83,7 @@ export default function jswPlugin() {
 
         load(id) {
             if (id === '\0virtual:jsw-wasm') {
-                return generateGlueCode(functionsToCompile, structsToCompile);
+                return generateGlueCode(functionsToCompile, structsToCompile, globalsToCompile, jsCallbacksToRegister);
             }
         },
 

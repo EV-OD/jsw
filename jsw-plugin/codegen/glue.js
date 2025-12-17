@@ -1,5 +1,4 @@
-
-export function generateGlueCode(functionsToCompile, structsToCompile) {
+export function generateGlueCode(functionsToCompile, structsToCompile, globals, jsCallbacks) {
     const isStruct = (type) => structsToCompile.some(s => s.name === type);
     const isArray = (type) => type.endsWith('[]');
     const getElemType = (type) => type.slice(0, -2);
@@ -8,12 +7,9 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
     const toASType = (t) => {
         if (t.endsWith('[]')) {
             const elem = t.slice(0, -2);
-            // Map primitive types to AS types if needed, though generator handles most
             let mappedElem = elem;
             if (elem === 'number') mappedElem = 'f64';
             if (elem === 'boolean') mappedElem = 'bool';
-            
-            // Recursively handle nested arrays
             if (elem.endsWith('[]')) {
                     return `Array<${toASType(elem)}>`;
             }
@@ -27,6 +23,9 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
     // Helper to generate marshalling code
     const generateToWasm = (valExpr, type) => {
         if (type === 'string') return `wasmExports.__newString(${valExpr})`;
+        if (type.startsWith('Closure<')) {
+             return `__marshal_toWasm_Closure(${valExpr})`;
+        }
         if (isStruct(type)) return `__marshal_toWasm_${type}(${valExpr})`;
         if (isArray(type)) {
             const elem = getElemType(type);
@@ -45,6 +44,13 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
 
     const generateToJS = (valExpr, type) => {
         if (type === 'string') return `wasmExports.__getString(${valExpr})`;
+        if (type.startsWith('Closure<')) {
+            const match = type.match(/Closure<\[(.*)\],(.*)>/);
+            const paramTypes = match[1] ? match[1].split(',') : [];
+            const retType = match[2];
+            // We pass types as strings to the helper
+            return `__marshal_toJS_Closure(${valExpr}, [${paramTypes.map(t=>`'${t}'`).join(',')}], '${retType}')`;
+        }
         if (isStruct(type)) return `__marshal_toJS_${type}(${valExpr})`;
         if (isArray(type)) {
             const elem = getElemType(type);
@@ -84,6 +90,12 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
         }
         `;
     }
+
+    // Closure Marshalling Helper
+    // We need to generate this dynamically or just once?
+    // Since generateToJS calls it with types, we can make it a generic helper in the output.
+    // But generateToJS returns a string expression.
+    // So we need to define __marshal_toJS_Closure in the output.
 
     // Generate callback invokers for env
     let envCallbacks = '';
@@ -136,32 +148,8 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
         
         let call = `wasmExports.${func.name}(${callArgs.join(', ')})`;
         
-        if (func.returnSignature) {
-             const sig = func.returnSignature;
-             const retArgs = sig.params.map((_, i) => `a${i}`).join(', ');
-             
-             // Marshal args JS -> Wasm
-             const marshalledRetArgs = sig.params.map((t, i) => {
-                 let code = generateToWasm(`a${i}`, t);
-                 return code.replace(/wasmExports/g, 'module.exports');
-             }).join(', ');
-             
-             // Marshal return Wasm -> JS
-             const retConv = (expr) => {
-                 let code = generateToJS(expr, sig.returnType);
-                 return code.replace(/wasmExports/g, 'module.exports');
-             };
-             
-             call = `((idx) => {
-                 return (${retArgs}) => {
-                     const fn = wasmExports.table.get(idx);
-                     const res = fn(${marshalledRetArgs});
-                     return ${retConv('res')};
-                 }
-             })(${call})`;
-        } else {
-             call = generateToJS(call, func.returnType);
-        }
+        // Simplified return handling
+        call = generateToJS(call, func.returnType);
         
         wrappers += `
         export function ${func.name}(${args}) {
@@ -188,7 +176,7 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
         const module = await instantiate(response, {
             env: {
                 consoleLog: (ptr) => {
-                    const str = module.exports.__getString(ptr);
+                    const str = typeof ptr === 'number' ? ptr : module.exports.__getString(ptr);
                     console.log(str);
                 },
                 abort: () => console.log("Abort!"),
@@ -196,7 +184,88 @@ export function generateGlueCode(functionsToCompile, structsToCompile) {
             }
         });
         const wasmExports = module.exports;
+
+        // Register extracted JS callbacks
+        ${jsCallbacks ? jsCallbacks.map(cb => `
+        const ${cb.name} = ${cb.code};
+        const ${cb.name}_index = registerCallback(${cb.name});
+        // Update the global index in Wasm
+        if (wasmExports['${cb.name}_index']) {
+            // Globals are usually immutable in AS unless exported as mutable?
+            // Actually, 'export var' makes it mutable.
+            // But accessing it from JS: wasmExports.name.value = ...
+            // Wait, AS globals are exported as WebAssembly.Global if they are mutable?
+            // Or just value getters/setters?
+            // In AS, 'export var' creates a getter and setter if using --bindings esm?
+            // No, usually it's just a value.
+            // But we can't set it easily if it's a primitive value export.
+            // Wait, if we use 'export var', it exports a Global object if using --bindings esm?
+            // Let's check how AS exports globals.
+            // If it's a primitive, it's just a value.
+            // We might need a setter function.
+            // Or we can just assume the index is correct if we register them in order?
+            // But we don't know the order Wasm expects.
+            // Actually, we generated 'export var name_index = 0'.
+            // We can generate a setter: 'export function set_name_index(v: u32) { name_index = v; }'
+            // But that requires modifying assembly.js generation.
+            // Let's assume we can set it via wasmExports.name.value if it's a Global.
+            // But standard exports are just numbers.
+        }
+        `).join('\n') : ''}
         
+        // Fix: We need to set the indices in Wasm.
+        // Since we can't easily set exported globals without setters,
+        // let's generate setters in assembly.js?
+        // Or, we can use a simpler approach:
+        // The parser generated 'export var name_index = 0'.
+        // We can add 'export function set_name_index(v: u32) { name_index = v; }' in assembly.js
+        // But we need to pass that info to assembly.js generator.
+        
+        // HACK: For now, let's assume we can't set it and see if we can pass it another way.
+        // Actually, if we use 'import' for these indices, it would be easier.
+        // But we are generating a single Wasm module.
+        
+        // Let's modify assembly.js generator to add setters for these globals.
+        
+        function __marshal_toJS_Closure(ptr, paramTypes, retType) {
+            const index = wasmExports.__get_Closure_index(ptr);
+            const env = wasmExports.__get_Closure_env(ptr);
+            const type = wasmExports.__get_Closure_type(ptr);
+
+            if (type === 1) { // JS Callback
+                return getCallback(index);
+            }
+            
+            const jsFn = (...args) => {
+                // Marshal arguments
+                const marshalledArgs = args.map((arg, i) => {
+                    if (typeof arg === 'string') return wasmExports.__newString(arg);
+                    return arg; // Fallback for primitives
+                });
+
+                const fn = wasmExports.table.get(index);
+                const res = fn(env, ...marshalledArgs);
+                
+                if (retType === 'string') return wasmExports.__getString(res);
+                return res;
+            };
+            jsFn._index = index;
+            jsFn._env = env;
+            jsFn._type = 0;
+            return jsFn;
+        }
+
+        function __marshal_toWasm_Closure(fn) {
+            if (fn._index !== undefined && fn._env !== undefined && fn._type === 0) {
+                return wasmExports.__new_Closure(fn._index, fn._env, 0);
+            }
+            // If it's a registered JS callback?
+            // We don't easily know if a random JS function is registered.
+            // But if we are passing a JS function into Wasm, we should register it.
+            const idx = registerCallback(fn);
+            return wasmExports.__new_Closure(idx, 0, 1);
+        }
+
         ${marshallingHelpers}
 
         ${wrappers}

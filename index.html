@@ -4,7 +4,10 @@
     <script type="module">
       import { add, factorial, normalJS, greet, addInt, sumArray, doubleArray, addPoints, processOuter, sumMatrix, transformPoints } from '/src/index.ts';
       import { multiplyMatrix } from '/src/matrix.ts';
-      import { testCallback, getFunc } from '/src/callback_test.ts';
+      import { testCallback, getFunc, getAdder, addGlobal } from '/src/callback_test.ts';
+      import { createComplex, processComplex } from '/src/object_test.ts';
+      import { createMixed, callMixed } from '/src/mixed_test.ts';
+      import { Rect, createRect, scaleRect, rectArea } from '/src/class_test.ts';
       
       console.log('Running tests from browser...');
 
@@ -94,6 +97,94 @@
       // Returning Functions
       const fn = getFunc();
       assert(fn(10), 20, 'getFunc()(10)');
+
+      // Closures
+      const adder = getAdder(5); // x=1, amount=5. v*2 + 1 + 5
+      assert(adder(10), 26, 'getAdder(5)(10) -> 10*2 + 1 + 5 = 26');
+      
+      const adder2 = getAdder(10); // x=1, amount=10. v*2 + 1 + 10
+      assert(adder2(10), 31, 'getAdder(10)(10) -> 10*2 + 1 + 10 = 31');
+
+      // Globals
+      assert(addGlobal(5), 15, 'addGlobal(5) -> 5 + 10 = 15');
+
+      // Object Tests
+      try {
+        console.log("Testing Objects...");
+        const complex = createComplex(5);
+        console.log('Complex Object:', complex);
+        assert(complex.id, 5, "Complex ID");
+        assert(complex.list.length, 3, "Complex List Length");
+        assert(complex.nested.val, 100, "Complex Nested Val");
+        
+        // Test methods
+        const res1 = complex.nested.fn(10);
+        assert(res1, 11, "Complex Nested Fn (10+1)");
+        
+        const res2 = complex.processor(10);
+        assert(res2, 50, "Complex Processor (10*5)");
+        
+        // Test passing object back to Wasm
+        const res3 = processComplex(complex);
+        // processComplex: obj.processor(obj.nested.val) + obj.nested.fn(10)
+        // processor(100) = 100 * 5 = 500
+        // nested.fn(10) = 10 + 1 = 11
+        // Total = 511
+        assert(res3, 511, "Process Complex Object in Wasm");
+      } catch (e) {
+        console.error("Object Test Failed", e);
+        document.body.innerHTML += `<div style="color:red">Object Test Failed: ${e.message}</div>`;
+      }
+
+      // Mixed Tests
+      try {
+        console.log("Testing Mixed Wasm/JS...");
+        const mixed = createMixed();
+        console.log('Mixed Object:', mixed);
+        
+        // Test Wasm Fn
+        assert(mixed.wasmFn(), 42, "Mixed Wasm Fn");
+        
+        // Test JS Fn
+        assert(mixed.jsFn(), 100, "Mixed JS Fn");
+        
+        // Test Round Trip
+        const res = callMixed(mixed);
+        assert(res, 142, "Mixed Round Trip (42 + 100)");
+        
+      } catch (e) {
+        console.error("Mixed Test Failed", e);
+        document.body.innerHTML += `<div style="color:red">Mixed Test Failed: ${e.message}</div>`;
+      }
+
+      // Class Tests
+      try {
+        console.log("Testing Classes...");
+        
+        // 1. Create Rect in Wasm
+        const r1 = createRect(0, 0, 10, 20);
+        console.log('Rect from Wasm:', r1);
+        assert(r1.width, 10, "Rect Width");
+        assert(r1.height, 20, "Rect Height");
+        
+        // 2. Pass Rect to Wasm
+        const area = rectArea(r1);
+        assert(area, 200, "Rect Area (Wasm)");
+        
+        // 3. Pass JS Class Instance to Wasm
+        const r2 = new Rect(10, 10, 5, 5);
+        const area2 = rectArea(r2);
+        assert(area2, 25, "JS Rect Instance Area (Wasm)");
+        
+        // 4. Return modified Rect
+        const r3 = scaleRect(r2, 2);
+        assert(r3.width, 10, "Scaled Rect Width");
+        assert(r3.height, 10, "Scaled Rect Height");
+        
+      } catch (e) {
+        console.error("Class Test Failed", e);
+        document.body.innerHTML += `<div style="color:red">Class Test Failed: ${e.message}</div>`;
+      }
 
     </script>
 </head>

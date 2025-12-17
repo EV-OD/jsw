@@ -23,6 +23,10 @@ The system uses TypeScript type annotations to infer AssemblyScript types:
 - **Objects (Interfaces)**: TypeScript Interfaces are compiled to AssemblyScript Classes.
     - Automatic marshalling of objects between JS and Wasm.
     - Support for nested objects.
+- **Classes**: TypeScript Classes are compiled to AssemblyScript Classes.
+    - Support for fields and constructors.
+    - `new Class(...)` syntax is supported inside Wasm functions.
+    - Methods are currently ignored (data-only classes).
 - **Arrays**: Full support for Arrays (`[]`).
     - Arrays of primitives (`number[]`, `string[]`).
     - Arrays of objects (`Point[]`).
@@ -46,22 +50,36 @@ The system uses TypeScript type annotations to infer AssemblyScript types:
 - **Returning Functions**: You can return functions from compiled functions.
     - The returned function is wrapped so it can be called from JavaScript.
 
----
+### 8. Closures & Scope
+- **Environment Capture**: Compiled functions can capture variables from their surrounding scope (Closures).
+- **Global Variables**: Module-level variables are supported and can be accessed/modified by compiled functions.
 
-## Limitations (What it cannot do yet)
-
-### 1. Closures & Scope
-- **Environment Capture**: Compiled functions cannot "capture" variables from their surrounding JavaScript scope. They must be pure or only rely on their arguments and global Wasm state.
+### 9. Advanced Object Support
+- **Methods in Objects**: Objects returned from Wasm can contain methods (Closures).
+- **Round-Trip Functions**: Functions passed into Wasm (in objects) can be passed back to JS seamlessly.
+- **Nested Structures**: Deeply nested objects and arrays are fully supported.
+    - Supported for local variables and arguments.
+    - Supported for module-level global variables.
     ```typescript
     let x = 10;
     function addX(y: number) {
         "use wasm";
-        return y + x; // Error: 'x' is not defined in Wasm scope
+        return y + x; // Works!
     }
     ```
 
-### 2. Classes
-- **JS Classes**: JavaScript/TypeScript `class` definitions are not yet supported. Use `interface` for data structures.
+### 10. Classes (Data Structures)
+- **Data Classes**: JavaScript/TypeScript `class` definitions are supported as data structures.
+    - Fields are extracted and compiled to AssemblyScript classes.
+    - Instances can be passed to and returned from Wasm.
+    - **Note**: Methods and Constructors defined in JS classes are **NOT** compiled to Wasm. The class is treated as a struct (DTO).
+
+---
+
+## Limitations (What it cannot do yet)
+
+### 1. Class Methods
+- **Methods**: Methods defined inside a JS `class` are not compiled to Wasm. Only the data fields are used.
 
 ### 4. JavaScript Standard Library
 - **Built-ins**: You cannot use JS built-ins like `Math` (unless using AS native `Math`), `Date`, `RegExp`, `JSON`, `Promise`, etc., unless you manually implement bindings.
