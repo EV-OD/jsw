@@ -17,9 +17,9 @@ export function mapTsType(tsType) {
         return `Array<${mapTsType(tsType.elementType)}>`;
     }
     if (t.isTSFunctionType(tsType)) {
-        const params = tsType.parameters.map(p => mapTsType(p.typeAnnotation.typeAnnotation)).join(',');
-        const ret = mapTsType(tsType.typeAnnotation.typeAnnotation);
-        return `Closure<[${params}],${ret}>`; 
+        const params = tsType.parameters.map(p => mapTsType(p.typeAnnotation ? p.typeAnnotation.typeAnnotation : null)).join(',');
+        const returnType = mapTsType(tsType.typeAnnotation ? tsType.typeAnnotation.typeAnnotation : null);
+        return 'Closure'; // Function pointer
     }
     return 'f64';
 }

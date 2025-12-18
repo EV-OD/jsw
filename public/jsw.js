@@ -661,6 +661,7 @@ export const {
   __get_Closure_env,
   __get_Closure_type,
   globalX,
+  seed,
   __new_NestedObj,
   __idof_NestedObj,
   __set_NestedObj_val,

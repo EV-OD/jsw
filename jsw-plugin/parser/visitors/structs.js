@@ -9,7 +9,7 @@ export function createStructsVisitor(structs) {
             const name = path.node.id.name;
             const fields = path.node.body.body.map(prop => ({
                 name: prop.key.name,
-                type: mapTsType(prop.typeAnnotation.typeAnnotation)
+                type: mapTsType(prop.typeAnnotation ? prop.typeAnnotation.typeAnnotation : null)
             }));
             structs.push({ name, fields });
         },
@@ -47,7 +47,7 @@ export function createStructsVisitor(structs) {
                     if (node.kind === 'constructor') {
                         constructorParams = node.params.map(p => ({
                             name: p.name,
-                            type: mapTsType(p.typeAnnotation.typeAnnotation)
+                            type: mapTsType(p.typeAnnotation ? p.typeAnnotation.typeAnnotation : null)
                         }));
                         
                         transformBodyTypes(propPath.get('body'));

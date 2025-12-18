@@ -7,6 +7,7 @@ import { generateAS } from './codegen/assembly.js';
 import { compileAS } from './compiler/index.js';
 import { generateGlueCode } from './codegen/glue.js';
 import { removeTypes } from './utils/ast.js';
+import { optimizeFunctions } from './optimizer/index.js';
 import { parse } from '@babel/parser';
 import { generate } from 'astring';
 
@@ -36,6 +37,7 @@ export default function jswPlugin() {
         }
 
         if (functionsToCompile.length > 0 || structsToCompile.length > 0) {
+            optimizeFunctions(functionsToCompile);
             const asCode = generateAS(functionsToCompile, structsToCompile, globalsToCompile, lambdasToCompile);
             compileAS(asCode);
         }

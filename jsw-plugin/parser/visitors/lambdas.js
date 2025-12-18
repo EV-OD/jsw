@@ -86,7 +86,7 @@ export function processLambdas(path, state, funcName) {
                     { name: '__env', type: envName },
                     ...arrowPath.node.params.map(p => ({
                         name: p.name,
-                        type: mapTsType(p.typeAnnotation.typeAnnotation)
+                        type: mapTsType(p.typeAnnotation ? p.typeAnnotation.typeAnnotation : null)
                     }))
                 ];
                 
@@ -95,7 +95,7 @@ export function processLambdas(path, state, funcName) {
                     lambdaBody = lambdaBody.replace(regex, `__env.${c.name}`);
                 });
 
-                const lambdaReturnType = mapTsType(arrowPath.node.returnType.typeAnnotation);
+                const lambdaReturnType = mapTsType(arrowPath.node.returnType ? arrowPath.node.returnType.typeAnnotation : null);
                 
                 state.lambdas.push({
                     name: lambdaName,
@@ -142,9 +142,9 @@ export function processLambdas(path, state, funcName) {
             } else {
                 const lambdaParams = arrowPath.node.params.map(p => ({
                     name: p.name,
-                    type: mapTsType(p.typeAnnotation.typeAnnotation)
+                    type: mapTsType(p.typeAnnotation ? p.typeAnnotation.typeAnnotation : null)
                 }));
-                const lambdaReturnType = mapTsType(arrowPath.node.returnType.typeAnnotation);
+                const lambdaReturnType = mapTsType(arrowPath.node.returnType ? arrowPath.node.returnType.typeAnnotation : null);
                 
                 state.lambdas.push({
                     name: lambdaName,

@@ -14,45 +14,61 @@ export function createFunctionsVisitor(state) {
             // Transform body types first so analysis sees AS types
             transformBodyTypes(path.get('body'));
 
-            const params = path.node.params.map(p => {
-                let type = 'f64';
-                let isCallback = false;
-                let callbackSignature = null;
-                
-                if (p.typeAnnotation && p.typeAnnotation.typeAnnotation) {
-                    const tsType = p.typeAnnotation.typeAnnotation;
-                    if (t.isTSFunctionType(tsType)) {
-                        isCallback = true;
-                        type = 'u32'; // Callback index
-                        callbackSignature = {
-                            params: tsType.parameters.map(param => mapTsType(param.typeAnnotation.typeAnnotation)),
-                            returnType: mapTsType(tsType.typeAnnotation.typeAnnotation)
-                        };
-                    } else {
-                        type = mapTsType(tsType);
+            let params;
+            try {
+                params = path.node.params.map(p => {
+                    let type = 'f64';
+                    let isCallback = false;
+                    let callbackSignature = null;
+                    
+                    if (p.typeAnnotation && p.typeAnnotation.typeAnnotation) {
+                        const tsType = p.typeAnnotation.typeAnnotation;
+                        if (t.isTSFunctionType(tsType)) {
+                            isCallback = true;
+                            type = 'u32'; // Callback index
+                            callbackSignature = {
+                                params: tsType.parameters.map(param => mapTsType(param.typeAnnotation ? param.typeAnnotation.typeAnnotation : null)),
+                                returnType: mapTsType(tsType.typeAnnotation ? tsType.typeAnnotation.typeAnnotation : null)
+                            };
+                        } else {
+                            type = mapTsType(tsType);
+                        }
                     }
-                }
-                return { name: p.name, type, isCallback, callbackSignature };
-            });
+                    return { name: p.name, type, isCallback, callbackSignature };
+                });
+            } catch (e) {
+                console.error(`Error processing params for function ${funcName}:`, e);
+                throw e;
+            }
 
             let returnType = 'f64';
             let returnSignature = null;
 
-            if (path.node.returnType && path.node.returnType.typeAnnotation) {
-                const tsType = path.node.returnType.typeAnnotation;
-                if (t.isTSFunctionType(tsType)) {
-                    returnType = 'Closure'; // Function ptr or Closure ptr
-                    returnSignature = {
-                        params: tsType.parameters.map(param => mapTsType(param.typeAnnotation.typeAnnotation)),
-                        returnType: mapTsType(tsType.typeAnnotation.typeAnnotation)
-                    };
-                } else {
-                    returnType = mapTsType(tsType.typeAnnotation);
+            try {
+                if (path.node.returnType && path.node.returnType.typeAnnotation) {
+                    const tsType = path.node.returnType.typeAnnotation;
+                    if (t.isTSFunctionType(tsType)) {
+                        returnType = 'Closure'; // Function ptr or Closure ptr
+                        returnSignature = {
+                            params: tsType.parameters.map(param => mapTsType(param.typeAnnotation ? param.typeAnnotation.typeAnnotation : null)),
+                            returnType: mapTsType(tsType.typeAnnotation ? tsType.typeAnnotation.typeAnnotation : null)
+                        };
+                    } else {
+                        returnType = mapTsType(tsType);
+                    }
                 }
+            } catch (e) {
+                console.error(`Error processing return type for function ${funcName}:`, e);
+                throw e;
             }
 
             // Analyze Lambdas
-            processLambdas(path, state, funcName);
+            try {
+                processLambdas(path, state, funcName);
+            } catch (e) {
+                console.error(`Error processing lambdas for function ${funcName}:`, e);
+                throw e;
+            }
 
             path.node.body.body = path.node.body.body.filter(n => !isUseWasmStmt(n));
             
@@ -81,13 +97,15 @@ export function createFunctionsVisitor(state) {
             });
 
             let body = generate.default(path.node.body).code;
+            let bodyAst = path.node.body;
 
             state.functions.push({
                 name: funcName,
                 params,
                 returnType,
                 returnSignature,
-                body
+                body,
+                bodyAst
             });
         }
     };

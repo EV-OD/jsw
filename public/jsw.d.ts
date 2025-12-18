@@ -40,6 +40,12 @@ export declare const globalX: {
   get value(): number;
   set value(value: number);
 };
+/** assembly/generated/seed */
+export declare const seed: {
+  /** @type `f64` */
+  get value(): number;
+  set value(value: number);
+};
 /**
  * assembly/generated/__new_NestedObj
  * @returns `assembly/generated/NestedObj`

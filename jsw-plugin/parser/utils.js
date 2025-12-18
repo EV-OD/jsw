@@ -2,6 +2,11 @@ import * as t from '@babel/types';
 import { mapTsType } from './types.js';
 
 export function isUseWasm(node) {
+    if (node.body.directives && node.body.directives.length > 0) {
+        for (const directive of node.body.directives) {
+            if (directive.value.value === 'use wasm') return true;
+        }
+    }
     return node.body.body.length > 0 && isUseWasmStmt(node.body.body[0]);
 }
 
