@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JS vs Wasm Neural Network Training</title>
+  <title>JS vs JSW Neural Network Training</title>
   <style>
     :root {
       --primary: #3f51b5;
@@ -290,7 +290,7 @@
   <header>
     <div style="display:flex; align-items:center; gap:10px;">
       <h1>Neural Network Playground</h1>
-      <span class="badge">Wasm vs JS</span>
+      <span class="badge">JSW vs JS</span>
     </div>
     <div>
       <a href="/" style="text-decoration:none; color:var(--text); font-size:0.9rem;">&larr; Back to Index</a>
@@ -319,7 +319,7 @@
         <button id="trainBtn" class="primary" style="margin-bottom:8px">Train Once</button>
         <div style="display:flex; gap:8px;">
           <button id="showJs">Show JS</button>
-          <button id="showWasm">Show Wasm</button>
+          <button id="showWasm">Show JSW</button>
         </div>
       </div>
 
@@ -341,7 +341,7 @@
             <span class="stat-val" id="jsTime">-</span>
           </div>
           <div class="stat-row">
-            <span>Wasm Time:</span>
+            <span>JSW Time:</span>
             <span class="stat-val" id="wasmTime">-</span>
           </div>
           <div style="height:1px; background:#ddd; margin:8px 0;"></div>
@@ -350,7 +350,7 @@
             <span class="stat-val" id="jsLoss">-</span>
           </div>
           <div class="stat-row">
-            <span>Wasm Loss:</span>
+            <span>JSW Loss:</span>
             <span class="stat-val" id="wasmLoss">-</span>
           </div>
         </div>
@@ -381,7 +381,7 @@
         </div>
         <div class="model-card">
           <div class="model-header">
-            <span>Wasm Model Weights</span>
+            <span>JSW Model Weights</span>
             <span style="font-size:0.8rem; opacity:0.7">Network Visualization</span>
           </div>
           <div id="wasmNet" class="network-container">
@@ -400,9 +400,9 @@
                       <tr style="background:#f5f5f7;">
                           <th>Run</th>
                           <th>JS Time (ms)</th>
-                          <th>Wasm Time (ms)</th>
+                          <th>JSW Time (ms)</th>
                           <th>JS Loss</th>
-                          <th>Wasm Loss</th>
+                          <th>JSW Loss</th>
                       </tr>
                   </thead>
                   <tbody></tbody>
@@ -471,7 +471,7 @@
       setTimeout(()=>toast.classList.remove('show'), 3000);
     }
 
-    function loadLinearData(count = 200){
+    function loadLinearData(count = 1000){
       points.length = 0;
       const theta = Math.random() * Math.PI - (Math.PI/2);
       const nx = Math.cos(theta);
@@ -491,7 +491,7 @@
       resetResults();
     }
 
-    document.getElementById('loadLinearBtn').addEventListener('click', ()=> loadLinearData(300));
+    document.getElementById('loadLinearBtn').addEventListener('click', ()=> loadLinearData(500));
 
     function drawPoints(preserveBackground = false){
       if(!preserveBackground) {
@@ -750,14 +750,12 @@
     document.getElementById('showWasm').addEventListener('click', ()=>{
       if(!lastWasmModel) { showToast('Train first'); return; }
       visualizeModel(lastWasmModel, 'wasm');
-      showToast('Showing Wasm Model');
+      showToast('Showing JSW Model');
     });
     
     // Benchmark Logic
     document.getElementById('btnBenchmark').addEventListener('click', async () => {
         const runs = parseInt(document.getElementById('benchRuns').value, 10) || 10;
-        const {data, labels} = prepareData();
-        if(data.length===0){ showToast('Add some points first'); return; }
         
         const btn = document.getElementById('btnBenchmark');
         btn.disabled = true;
@@ -767,6 +765,18 @@
         const tableBody = document.querySelector('#benchTable tbody');
         tableBody.innerHTML = '';
         document.getElementById('benchPanel').style.display = 'block';
+
+        // Clear previous summary if exists
+        const oldSummary = document.getElementById('benchSummary');
+        if(oldSummary) oldSummary.remove();
+        
+        // Add summary placeholder
+        const summaryDiv = document.createElement('div');
+        summaryDiv.id = 'benchSummary';
+        summaryDiv.style.marginBottom = '1rem';
+        summaryDiv.style.fontWeight = '600';
+        summaryDiv.innerHTML = 'Calculating averages...';
+        document.getElementById('benchPanel').insertBefore(summaryDiv, document.getElementById('benchTable').parentElement);
         
         let i = 0;
         
@@ -777,9 +787,30 @@
                 btn.textContent = 'Run Benchmark';
                 document.getElementById('btnDownloadCsv').disabled = false;
                 drawBenchChart();
+
+                // Calculate Averages
+                const avgJs = benchmarkResults.reduce((s, r)=> s + r.jsTime, 0) / runs;
+                const avgWasm = benchmarkResults.reduce((s, r)=> s + r.wasmTime, 0) / runs;
+                
+                const faster = avgJs > avgWasm ? 'JSW' : 'JS';
+                const speedup = faster === 'JSW' ? (avgJs / avgWasm) : (avgWasm / avgJs);
+
+                summaryDiv.innerHTML = `
+                    <span style="color:#f44336">Avg JS Time: ${avgJs.toFixed(2)} ms</span> &nbsp;|&nbsp; 
+                    <span style="color:#2196f3">Avg JSW Time: ${avgWasm.toFixed(2)} ms</span>
+                    <br/>
+                    <span style="font-size:0.9em; color:#666">
+                        ${faster} is <span style="color:#000">${speedup.toFixed(2)}x</span> faster on average.
+                    </span>
+                `;
+
                 showToast('Benchmark Complete');
                 return;
             }
+
+            // Generate NEW data for this run (Same for both optimized/unoptimized in this step)
+            loadLinearData(Math.random()*10000);
+            const {data, labels} = prepareData();
             
             // Train JS
             const t0 = performance.now();
@@ -815,7 +846,7 @@
             btn.textContent = `Running (${i}/${runs})...`;
             
             // Allow UI update
-            setTimeout(runStep, 10);
+            setTimeout(runStep, 50);
         }
         
         // Start
@@ -855,8 +886,14 @@
         benchmarkResults.forEach(r => maxTime = Math.max(maxTime, r.jsTime, r.wasmTime));
         maxTime = maxTime * 1.1; // padding
         
-        const xScale = (w - 2*padding) / (benchmarkResults.length - 1 || 1);
-        const yScale = (h - 2*padding) / maxTime;
+        // Calculate dimensions
+        const chartW = w - 2*padding;
+        const chartH = h - 2*padding;
+        const count = benchmarkResults.length;
+        const slotWidth = chartW / count;
+        const barWidth = (slotWidth * 0.6) / 2; // Share slot between 2 bars
+        
+        const yScale = chartH / maxTime;
         
         // Draw Axis
         cx.beginPath();
@@ -869,33 +906,38 @@
         cx.lineTo(w - padding, h - padding);
         cx.stroke();
         
-        function drawLine(key, color) {
-            cx.beginPath();
-            cx.strokeStyle = color;
-            cx.lineWidth = 2;
-            benchmarkResults.forEach((r, i) => {
-               const x = padding + i * xScale;
-               const val = r[key];
-               const y = (h - padding) - (val * yScale);
-               if(i===0) cx.moveTo(x,y);
-               else cx.lineTo(x,y);
-               
-               // dot
-               cx.fillStyle = color;
-               cx.fillRect(x-2, y-2, 4, 4);
-            });
-            cx.stroke();
-        }
-        
-        drawLine('jsTime', '#f44336'); // Red for JS
-        drawLine('wasmTime', '#2196f3'); // Blue for Wasm
+        // Draw Bars
+        benchmarkResults.forEach((r, i) => {
+            const xBase = padding + i * slotWidth + (slotWidth * 0.2); // center in slot
+            
+            // JS Bar
+            const hJs = r.jsTime * yScale;
+            const yJs = h - padding - hJs;
+            cx.fillStyle = '#f44336';
+            cx.fillRect(xBase, yJs, barWidth, hJs);
+            
+            // JSW (Wasm) Bar
+            const hWasm = r.wasmTime * yScale;
+            const yWasm = h - padding - hWasm;
+            cx.fillStyle = '#2196f3';
+            cx.fillRect(xBase + barWidth, yWasm, barWidth, hWasm);
+            
+            // Labels (Runs)
+            cx.fillStyle = '#666';
+            cx.textAlign = 'center';
+            cx.font = '10px sans-serif';
+            if(count <= 20 || i % 5 === 0) { // prevent crowding
+               cx.fillText(r.run, xBase + barWidth, h - padding + 15);
+            }
+        });
         
         // Legend
+        cx.textAlign = 'left';
         cx.font = '12px sans-serif';
         cx.fillStyle = '#f44336';
         cx.fillText('JS Time', w-100, 30);
         cx.fillStyle = '#2196f3';
-        cx.fillText('Wasm Time', w-100, 50);
+        cx.fillText('JSW Time', w-100, 50);
     }
 
     // initial draw
