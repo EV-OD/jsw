@@ -14,16 +14,16 @@ export function isPrimeWasm(n: number): boolean {
 
 export function countPrimesWasm(limit: number): number {
     "use wasm";
-    let lim = limit | 0;
+    let lim = <i32>limit;
     let count = 0;
     for (let i = 0; i < lim; i++) {
-        // Inline isPrime for maximum performance (avoids call overhead & float conversion)
         if (i <= 1) continue;
         if (i <= 3) { count++; continue; }
         if (i % 2 == 0 || i % 3 == 0) continue;
         
         let isP = true;
         let k = 5;
+        // i and k are i32 automatically
         while (k * k <= i) {
             if (i % k == 0 || i % (k + 2) == 0) {
                 isP = false;
@@ -33,10 +33,9 @@ export function countPrimesWasm(limit: number): number {
         }
         if (isP) count++;
     }
-    return count;
+    return <f64>count;
 }
 
-// Internal helper for fast recursion (avoids export table lookup)
 function fibInner(n: number): number {
     "use wasm";
     if (n <= 1) return n;
@@ -66,10 +65,10 @@ export function bubbleSortWasm(arr: number[]): number[] {
 
 export function matrixMultiplyWasm(a: number[], b: number[], size: number): number[] {
     "use wasm";
-    let s = size | 0;
+    let s = <i32>size;
     let result = new Array<number>(s * s);
     
-    // Transpose B for cache locality (huge performance win)
+    // Transpose B
     let bT = new Array<number>(s * s);
     for (let i = 0; i < s; i++) {
         for (let j = 0; j < s; j++) {
@@ -79,14 +78,11 @@ export function matrixMultiplyWasm(a: number[], b: number[], size: number): numb
 
     for (let i = 0; i < s; i++) {
         for (let j = 0; j < s; j++) {
-            let sum = 0;
-            // Pre-calculate row offset
-            let i_s = (i * s) | 0;
-            let j_s = (j * s) | 0; // Row in transposed B
+            let sum: f64 = 0;
+            let i_s = i * s;
+            let j_s = j * s; 
             
             for (let k = 0; k < s; k++) {
-                // Linear access on both A and bT
-                // Automatic unchecked access via plugin
                 let valA = a[i_s + k];
                 let valB = bT[j_s + k];
                 sum = sum + valA * valB;
@@ -97,39 +93,27 @@ export function matrixMultiplyWasm(a: number[], b: number[], size: number): numb
     return result;
 }
 
-// // Simple LCG for deterministic random numbers in Wasm
-let seed: number = 123456789;
-// function random(): number {
-//     "use wasm";
-//     // LCG constants: a = 1664525, c = 1013904223
-//     seed = (seed * 1664525 + 1013904223) | 0;
-//     // Convert to float [0, 1)
-//     return (seed >>> 0) / 4294967296.0;
-// }
+let seedBenchmark: number = 123456789;
 
 export function monteCarloPiWasm(iterations: number): number {
     "use wasm";
-    let iter = iterations | 0;
+    let iter = <i32>iterations;
     let inside = 0;
     
-    // Use a local variable for seed to ensure it stays in a register
-    let s = seed; 
+    let s = <i32>seedBenchmark; 
 
     for (let i = 0; i < iter; i++) {
-        // Inline random() #1
-        s = (s * 1664525 + 1013904223) | 0;
-        let x = (s >>> 0) / 4294967296.0;
+        s = s * 1664525 + 1013904223;
+        let x = <f64>(u32(s)) / 4294967296.0;
 
-        // Inline random() #2
-        s = (s * 1664525 + 1013904223) | 0;
-        let y = (s >>> 0) / 4294967296.0;
+        s = s * 1664525 + 1013904223;
+        let y = <f64>(u32(s)) / 4294967296.0;
 
         if (x * x + y * y <= 1.0) {
             inside++;
         }
     }
     
-    // Update the global seed at the end
-    seed = s;
-    return (inside / iterations) * 4.0;
+    seedBenchmark = <f64>s;
+    return (<f64>inside / <f64>iter) * 4.0;
 }

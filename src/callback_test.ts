@@ -10,16 +10,24 @@ export function getFunc(): (v: number) => number {
   };
 }
 
+let g_amount: number = 0;
 export function getAdder(amount: number): (v: number) => number {
     "use wasm";
+    g_amount = amount;
     return (v: number): number => {
-        return v + amount;
+        return v + g_amount;
     };
 }
 
 let globalX: number = 10;
-
-export function addGlobal(y: number): number {
+export function testGlobalCapture(): (v: number) => number {
     "use wasm";
-    return y + globalX;
+    return (v: number): number => {
+        return v + globalX;
+    };
+}
+
+export function addGlobal(v: number): number {
+  "use wasm";
+  return v + globalX;
 }

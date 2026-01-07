@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Train JS vs Wasm (comparison)</title>
+  <style>
+    body { font-family: system-ui, Arial; padding: 20px; }
+    #controls { margin-bottom: 10px; }
+    canvas { border: 1px solid #444; display:block; }
+    .badge { display:inline-block; min-width:140px; }
+    button { margin-right:8px; }
+  </style>
+</head>
+<body>
+  <h2>Train: JS vs Wasm (demo)</h2>
+  <div id="controls">
+    <button id="toggleLabel">Current Label: <span id="currentLabel">Blue (0)</span></button>
+    <button id="clearBtn">Clear Points</button>
+    <button id="loadLinearBtn">Load linear data</button>
+    <button id="trainBtn">Train (JS then Wasm)</button>
+    <button id="showJs">Show JS result</button>
+    <button id="showWasm">Show Wasm result</button>
+    <span class="badge">JS time: <b id="jsTime">-</b> ms</span>
+    <span class="badge">WASM time: <b id="wasmTime">-</b> ms</span>
+    <span class="badge">JS loss: <b id="jsLoss">-</b></span>
+    <span class="badge">WASM loss: <b id="wasmLoss">-</b></span>
+  </div>
+  <div style="margin-top:10px; display:flex; gap:12px;">
+    <div style="flex:1">
+      <strong>JS model (weights & biases)</strong>
+      <pre id="jsParams" style="max-height:160px; overflow:auto; background:#f5f5f5; padding:8px">-</pre>
+    </div>
+    <div style="flex:1">
+      <strong>WASM model (weights & biases)</strong>
+      <pre id="wasmParams" style="max-height:160px; overflow:auto; background:#f5f5f5; padding:8px">-</pre>
+    </div>
+  </div>
+
+  <canvas id="c" width="600" height="400"></canvas>
+
+  <p>Click canvas to add a point. Toggle label to switch between two classes (Blue / Red).</p>
+
+  <script type="module">
+    import { trainModelWasm, predictWasm } from '/src/wasm_backend.ts';
+    import { trainModelJs, predictJs } from '/src/pure_backend.ts';
+
+    // Simple UI + dataset, and two training functions (JS & "WASM") adapted from project attachments.
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    let currentLabel = 0; // 0 -> blue, 1 -> red
+    const points = []; // {x: 0..1, y: 0..1, label: [1,0] or [0,1]}
+
+    document.getElementById('toggleLabel').addEventListener('click', ()=>{
+      currentLabel = 1 - currentLabel;
+      document.getElementById('currentLabel').textContent = currentLabel===0? 'Blue (0)' : 'Red (1)';
+    });
+    document.getElementById('clearBtn').addEventListener('click', ()=>{ points.length = 0; drawPoints(); resetResults(); });
+
+    canvas.addEventListener('click', (e)=>{
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / canvas.width;
+      const y = (e.clientY - rect.top) / canvas.height;
+      const label = currentLabel===0 ? [1,0] : [0,1];
+      points.push({x,y,label});
+      drawPoints();
+    });
+
+    // Load a simple linearly separable dataset into `points`.
+    function loadLinearData(count = 200){
+      points.length = 0;
+      // random line: choose normal vector via angle and offset
+      const theta = Math.random() * Math.PI - (Math.PI/2);
+      const nx = Math.cos(theta);
+      const ny = Math.sin(theta);
+      // offset shifts the line; pick near center
+      const offset = (Math.random() - 0.5) * 0.2;
+      for(let i=0;i<count;i++){
+        const x = Math.random();
+        const y = Math.random();
+        // decision value: dot(normal, p) - offset
+        const val = nx * x + ny * y - (0.5 + offset);
+        // small label noise possibility
+        const noisy = Math.random() < 0.02; // 2% noise
+        const classIndex = noisy ? (Math.random() < 0.5 ? 0 : 1) : (val > 0 ? 0 : 1);
+        const label = classIndex === 0 ? [1,0] : [0,1];
+        points.push({x,y,label});
+      }
+      drawPoints();
+      resetResults();
+      document.getElementById('jsParams').textContent = '-';
+      document.getElementById('wasmParams').textContent = '-';
+    }
+
+    document.getElementById('loadLinearBtn').addEventListener('click', ()=> loadLinearData(300));
+
+    // draw points; if preserveBackground is true, do not clear (useful when overlaying model visualization)
+    function drawPoints(preserveBackground = false){
+      if(!preserveBackground) ctx.clearRect(0,0,canvas.width,canvas.height);
+      for(const p of points){
+        ctx.beginPath();
+        ctx.fillStyle = p.label[0]===1 ? 'blue' : 'red';
+        ctx.arc(p.x*canvas.width, p.y*canvas.height, 6, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    function resetResults(){
+      document.getElementById('jsTime').textContent = '-';
+      document.getElementById('wasmTime').textContent = '-';
+      document.getElementById('jsLoss').textContent = '-';
+      document.getElementById('wasmLoss').textContent = '-';
+    }
+
+    // Small seeded RNG factory so results are deterministic-ish
+    function makeRng(seed0){
+      let seed = seed0 >>> 0;
+      return function(){ seed = (1103515245 * seed + 12345) >>> 0; return (seed % 10000) / 10000; };
+    }
+
+    // modelPredict: call exported prediction functions from the compiled project
+    // Expects `window.predictJs` and `window.predictWasm` to be wired to compiled exports.
+    function modelPredict(model, input, backend){
+      if(backend === 'js' && typeof predictJs === 'function') return predictJs(input, model);
+      if(backend === 'wasm' && typeof predictWasm === 'function') return predictWasm(input, model);
+      throw new Error('predict function for backend "' + backend + '" is not available. Load project functions.');
+    }
+
+    // Convert points array to training arrays
+    function prepareData(){
+      const data = points.map(p => [p.x, p.y]);
+      const labels = points.map(p => p.label);
+      return {data, labels};
+    }
+
+    // Expect the project to expose `trainModelJs`, `predictJs`, `trainModelWasm`, `predictWasm` on `window`.
+    // No wasm loader here — we call those functions directly as you requested.
+
+    function computeLoss(model, data, labels, backend='js'){
+      if(!data || data.length===0) return '-';
+      let sum = 0;
+      for(let i=0;i<data.length;i++){
+        const out = modelPredict(model, data[i], backend);
+        if(!out || !out.length) return '-';
+        for(let j=0;j<out.length;j++){
+          const diff = out[j] - (labels[i][j] || 0);
+          if(!isFinite(diff)) return '-';
+          sum += diff*diff;
+        }
+      }
+      const val = sum / data.length;
+      return isFinite(val) ? val.toFixed(4) : '-';
+    }
+
+    // Visualization: color grid cells by predicted class
+    function visualizeModel(model, backend='js'){
+      const step = 6; // pixel step
+      // paint grid on top of a cleared canvas
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for(let y=0;y<canvas.height;y+=step){
+        for(let x=0;x<canvas.width;x+=step){
+          const nx = (x + step/2) / canvas.width, ny = (y + step/2) / canvas.height;
+          const out = modelPredict(model, [nx,ny], backend);
+          const classIndex = (out && out[0] > out[1]) ? 0 : 1;
+          ctx.fillStyle = classIndex===0 ? 'rgba(173,216,230,0.35)' : 'rgba(250,128,114,0.35)';
+          ctx.fillRect(x,y,step,step);
+        }
+      }
+      // draw points on top without clearing the grid
+      drawPoints(true);
+    }
+
+    let lastJsModel = null, lastWasmModel = null;
+
+    document.getElementById('trainBtn').addEventListener('click', async ()=>{
+      const {data, labels} = prepareData();
+      if(data.length===0){ alert('Add some points to train.'); return; }
+      // disable controls while training
+      const trainBtn = document.getElementById('trainBtn');
+      const showJsBtn = document.getElementById('showJs');
+      const showWasmBtn = document.getElementById('showWasm');
+      trainBtn.disabled = true; showJsBtn.disabled = true; showWasmBtn.disabled = true;
+
+      // Train JS
+      if(typeof trainModelJs !== 'function'){
+        alert('trainModelJs is not available. Check the import path or build.');
+        trainBtn.disabled = false; showJsBtn.disabled = false; showWasmBtn.disabled = false;
+        return;
+      }
+      const t0 = performance.now();
+      const jsModel = trainModelJs(data, labels, 30, 0.01);
+      const t1 = performance.now();
+      const jsTime = (t1-t0).toFixed(2);
+      document.getElementById('jsTime').textContent = jsTime;
+      const jsLoss = computeLoss(jsModel, data, labels);
+      document.getElementById('jsLoss').textContent = jsLoss;
+      lastJsModel = jsModel;
+      document.getElementById('jsParams').textContent = JSON.stringify(jsModel, null, 2);
+
+      // Train Wasm (sequentially)
+
+      const w0 = performance.now();
+      if(typeof trainModelWasm !== 'function'){
+        alert('trainModelWasm is not available. Check the import path or build.');
+        trainBtn.disabled = false; showJsBtn.disabled = false; showWasmBtn.disabled = false;
+        return;
+      }
+      const wasmModel = trainModelWasm(data, labels, 30, 0.01);
+      const w1 = performance.now();
+      const wasmTime = (w1-w0).toFixed(2);
+      document.getElementById('wasmTime').textContent = wasmTime;
+      const wasmLoss = computeLoss(wasmModel, data, labels);
+      document.getElementById('wasmLoss').textContent = wasmLoss;
+      lastWasmModel = wasmModel;
+      document.getElementById('wasmParams').textContent = JSON.stringify(wasmModel, null, 2);
+
+      // re-enable controls
+      trainBtn.disabled = false; showJsBtn.disabled = false; showWasmBtn.disabled = false;
+
+      alert('Training finished. JS time: '+jsTime+' ms, WASM time: '+wasmTime+' ms');
+    });
+
+    document.getElementById('showJs').addEventListener('click', ()=>{
+      if(!lastJsModel) { alert('No JS model trained yet. Click Train first.'); return; }
+      visualizeModel(lastJsModel);
+    });
+    document.getElementById('showWasm').addEventListener('click', ()=>{
+      if(!lastWasmModel) { alert('No Wasm model trained yet. Click Train first.'); return; }
+      visualizeModel(lastWasmModel);
+    });
+
+    // initial draw
+    drawPoints();
+  </script>
+</body>
+</html>

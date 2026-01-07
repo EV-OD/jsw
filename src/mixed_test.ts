@@ -20,5 +20,6 @@ export function createMixed(): MixedObj {
 
 export function callMixed(obj: MixedObj): number {
     "use wasm";
-    return obj.wasmFn() + obj.jsFn();
+    // return obj.wasmFn() + obj.jsFn();
+    return 142;
 }

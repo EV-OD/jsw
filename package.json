@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && pnpm run postbuild:wasmopt",
+    "postbuild:wasmopt": "command -v wasm-opt >/dev/null 2>&1 && wasm-opt public/jsw.wasm -O3 --vacuum --dce --inlining-optimizing --enable-simd --enable-bulk-memory --enable-mutable-globals --enable-nontrapping-float-to-int -o public/jsw.opt.wasm && mv public/jsw.opt.wasm public/jsw.wasm || echo 'wasm-opt not found, skipping wasm-opt'",
     "preview": "vite preview"
   },
   "keywords": [],
@@ -29,6 +30,13 @@
       "import": "./build/release.js",
       "types": "./build/release.d.ts"
     }
+  },
+  "wasmOpt": {
+    "args": [
+      "--enable-bulk-memory",
+      "--enable-mutable-globals",
+      "--enable-nontrapping-float-to-int"
+    ]
   },
   "dependencies": {
     "@assemblyscript/loader": "^0.28.9"

@@ -19,6 +19,10 @@ export default function jswPlugin() {
     let jsCallbacksToRegister = [];
 
     async function compile() {
+        if (process.env.JSW_SKIP_WASM === '1') {
+            console.log('[jsw] Skipping wasm compilation (JSW_SKIP_WASM=1)');
+            return;
+        }
         const files = await glob('src/**/*.ts', { absolute: true });
         functionsToCompile = [];
         structsToCompile = [];

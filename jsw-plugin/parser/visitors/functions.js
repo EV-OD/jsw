@@ -16,11 +16,18 @@ export function createFunctionsVisitor(state) {
 
             let params;
             try {
-                params = path.node.params.map(p => {
+                params = path.node.params.map((p, idx) => {
                     let type = 'f64';
                     let isCallback = false;
                     let callbackSignature = null;
-                    
+
+                    // Safely derive a parameter name. Handle Identifier, AssignmentPattern, RestElement, and others.
+                    let paramName = null;
+                    if (p && p.type === 'Identifier') paramName = p.name;
+                    else if (p && p.type === 'AssignmentPattern' && p.left && p.left.type === 'Identifier') paramName = p.left.name;
+                    else if (p && p.type === 'RestElement' && p.argument && p.argument.type === 'Identifier') paramName = p.argument.name;
+                    else paramName = `arg${idx}`;
+
                     if (p.typeAnnotation && p.typeAnnotation.typeAnnotation) {
                         const tsType = p.typeAnnotation.typeAnnotation;
                         if (t.isTSFunctionType(tsType)) {
@@ -34,7 +41,7 @@ export function createFunctionsVisitor(state) {
                             type = mapTsType(tsType);
                         }
                     }
-                    return { name: p.name, type, isCallback, callbackSignature };
+                    return { name: paramName, type, isCallback, callbackSignature };
                 });
             } catch (e) {
                 console.error(`Error processing params for function ${funcName}:`, e);

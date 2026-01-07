@@ -6,6 +6,10 @@ import generate from '@babel/generator';
 export function optimizeFunctions(functions) {
     const functionMap = new Map();
     for (const func of functions) {
+        if (!func || !func.name) {
+            console.warn('[optimizeFunctions] skipping function with no name when building map', func && Object.keys(func));
+            continue;
+        }
         functionMap.set(func.name, func);
     }
 
@@ -18,6 +22,10 @@ export function optimizeFunctions(functions) {
         iterations++;
 
         for (const func of functions) {
+            if (!func || !func.name) {
+                console.warn('[optimizeFunctions] skipping function with no name', func && Object.keys(func));
+                continue;
+            }
             if (!func.bodyAst) continue;
 
             // Wrap in a program to allow traversal

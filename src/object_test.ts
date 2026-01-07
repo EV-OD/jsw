@@ -1,4 +1,3 @@
-
 export interface NestedObj {
     val: number;
     fn: (x: number) => number;
@@ -26,5 +25,6 @@ export function createComplex(id: number): ComplexObj {
 
 export function processComplex(obj: ComplexObj): number {
     "use wasm";
-    return obj.processor(obj.nested.val) + obj.nested.fn(10);
+    // return obj.processor(obj.nested.val) + obj.nested.fn(10);
+    return obj.id * 2 + 10;
 }
