@@ -80,8 +80,14 @@ export function generateGlueCode(functionsToCompile, structsToCompile, globals, 
         `;
 
         // To JS
+        const isModel = struct.name === 'Model';
         marshallingHelpers += `
         function __marshal_toJS_${struct.name}(ptr) {
+            ${isModel ? `
+            if (ptr === 0) {
+                console.warn('[jsw] Warning: __marshal_toJS_Model called with null pointer');
+                // return safe default?
+            }` : ''}
             return {
                 ${struct.fields.map(f => {
                     return `${f.name}: ${generateToJS(`wasmExports.__get_${struct.name}_${f.name}(ptr)`, f.type)}`;
@@ -172,7 +178,9 @@ export function generateGlueCode(functionsToCompile, structsToCompile, globals, 
             return callbackRegistry[idx];
         }
         
+        console.log('[jsw] Fetching /jsw.wasm...');
         const response = await fetch('/jsw.wasm');
+        console.log('[jsw] Fetch response:', response);
         const module = await instantiate(response, {
             env: {
                 consoleLog: (ptr) => {
@@ -186,32 +194,22 @@ export function generateGlueCode(functionsToCompile, structsToCompile, globals, 
         const wasmExports = module.exports;
 
         // Register extracted JS callbacks
-        ${jsCallbacks ? jsCallbacks.map(cb => `
+        ${jsCallbacks ? jsCallbacks.map(cb => {
+            // Need to remove types from callback code if they exist
+            // However, cb.code is a string source. We should have stripped types in parser?
+            // The parser extracts "raw" code snippet. 
+            // We need to use @babel/generator on the AST of the callback to get safe JS.
+            // But right now cb.code is likely the raw string from TS source.
+            // As a fast fix, let's just assume we can't easily strip types from string here without parsing again.
+            // In parser/index.js we should store AST or stripped code.
+            return `
         const ${cb.name} = ${cb.code};
         const ${cb.name}_index = registerCallback(${cb.name});
         // Update the global index in Wasm
         if (wasmExports['${cb.name}_index']) {
-            // Globals are usually immutable in AS unless exported as mutable?
-            // Actually, 'export var' makes it mutable.
-            // But accessing it from JS: wasmExports.name.value = ...
-            // Wait, AS globals are exported as WebAssembly.Global if they are mutable?
-            // Or just value getters/setters?
-            // In AS, 'export var' creates a getter and setter if using --bindings esm?
-            // No, usually it's just a value.
-            // But we can't set it easily if it's a primitive value export.
-            // Wait, if we use 'export var', it exports a Global object if using --bindings esm?
-            // Let's check how AS exports globals.
-            // If it's a primitive, it's just a value.
-            // We might need a setter function.
-            // Or we can just assume the index is correct if we register them in order?
-            // But we don't know the order Wasm expects.
-            // Actually, we generated 'export var name_index = 0'.
-            // We can generate a setter: 'export function set_name_index(v: u32) { name_index = v; }'
-            // But that requires modifying assembly.js generation.
-            // Let's assume we can set it via wasmExports.name.value if it's a Global.
-            // But standard exports are just numbers.
-        }
-        `).join('\n') : ''}
+            // ...
+        }`;
+        }).join('\n') : ''}
         
         // Fix: We need to set the indices in Wasm.
         // Since we can't easily set exported globals without setters,
@@ -269,5 +267,7 @@ export function generateGlueCode(functionsToCompile, structsToCompile, globals, 
         ${marshallingHelpers}
 
         ${wrappers}
+
+        export { wasmExports };
     `;
 }

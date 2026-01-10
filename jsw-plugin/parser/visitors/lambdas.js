@@ -2,6 +2,7 @@ import * as t from '@babel/types';
 import generate from '@babel/generator';
 import { mapTsType } from '../types.js';
 import { isUseWasmStmt } from '../utils.js';
+import { removeTypes } from '../../utils/ast.js';
 
 export function processLambdas(path, state, funcName) {
     path.traverse({
@@ -15,7 +16,9 @@ export function processLambdas(path, state, funcName) {
             if (isInsideObject && !hasUseWasm) {
                 // Extract as JS Callback
                 const callbackName = `__js_callback_${funcName}_${state.jsCallbackCounter++}`;
-                const callbackCode = generate.default(arrowPath.node).code;
+                
+                const cleanNode = removeTypes(arrowPath.node);
+                const callbackCode = generate.default(cleanNode).code;
                 
                 state.jsCallbacks.push({
                     name: callbackName,

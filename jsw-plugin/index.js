@@ -9,7 +9,7 @@ import { generateGlueCode } from './codegen/glue.js';
 import { removeTypes } from './utils/ast.js';
 import { optimizeFunctions } from './optimizer/index.js';
 import { parse } from '@babel/parser';
-import { generate } from 'astring';
+import generate from '@babel/generator';
 
 export default function jswPlugin() {
     let functionsToCompile = [];
@@ -95,7 +95,8 @@ export default function jswPlugin() {
 
         transform(code, id) {
             if (!id.endsWith('.ts') || !code.includes('use wasm')) return;
-
+            console.log(`[jsw] Transforming ${id}`);
+            
             // We need to strip types for the JS output that Vite expects
             // But we also need to replace the body with the proxy call
             
@@ -106,9 +107,24 @@ export default function jswPlugin() {
                 if (node.type === 'FunctionDeclaration' || (node.type === 'ExportNamedDeclaration' && node.declaration && node.declaration.type === 'FunctionDeclaration')) {
                     const func = node.type === 'FunctionDeclaration' ? node : node.declaration;
                     
-                    if (func.body.body.length > 0 && 
+                    let isWasm = false;
+                    // Check directives (Babel parser often puts "use strict"-style strings here)
+                    if (func.body.directives && func.body.directives.length > 0) {
+                        for (const d of func.body.directives) {
+                            if (d.value && d.value.value === 'use wasm') {
+                                isWasm = true;
+                                break;
+                            }
+                        }
+                    }
+                    // Check first statement
+                    if (!isWasm && func.body.body.length > 0 && 
                         func.body.body[0].type === 'ExpressionStatement' && 
                         func.body.body[0].expression.value === 'use wasm') {
+                        isWasm = true;
+                    }
+
+                    if (isWasm) {
                         
                         hasWasm = true;
                         const name = func.id.name;
@@ -138,11 +154,12 @@ export default function jswPlugin() {
 
             if (hasWasm) {
                 // We need to remove types before generating JS
+                // Use @babel/generator which handles Babel ASTs correctly
                 const cleanAst = removeTypes(ast.program);
-                const generated = generate(cleanAst);
+                const output = generate.default ? generate.default(cleanAst) : generate(cleanAst); 
                 return `
                     import { wasmExports as __jsw_exports } from 'virtual:jsw-wasm';
-                    ${generated}
+                    ${output.code}
                 `;
             }
         }
